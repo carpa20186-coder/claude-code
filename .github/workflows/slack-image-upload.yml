@@ -3,7 +3,8 @@ name: Slack Image Upload
 on:
   push:
     paths:
-      - 'deliverables/**/**.png'
+      - 'deliverables/**.png'
+      - 'deliverables/*.png'
 
 jobs:
   upload:
