@@ -1,0 +1,39 @@
+name: Slack Image Upload
+
+on:
+  push:
+    paths:
+      - 'deliverables/**/**.png'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload images to Slack
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          pip install requests -q
+          python3 - <<'EOF'
+          import requests, glob, os, sys
+
+          token   = os.environ["SLACK_BOT_TOKEN"]
+          channel = "C0AV40ESUMS"
+
+          files = glob.glob("deliverables/**/*.png", recursive=True)
+          if not files:
+              print("画像なし")
+              sys.exit(0)
+
+          for path in files:
+              with open(path, "rb") as f:
+                  r = requests.post(
+                      "https://slack.com/api/files.upload",
+                      headers={"Authorization": f"Bearer {token}"},
+                      data={"channels": channel, "filename": os.path.basename(path)},
+                      files={"file": f}
+                  )
+              print(path, r.json().get("ok"))
+          EOF
