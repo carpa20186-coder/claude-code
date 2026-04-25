@@ -1,5 +1,13 @@
 import type { PurchaseRecord, Customer, ColumnMapping } from '../types';
 
+export interface Project {
+  name: string;
+  purchaseCount: number;
+  customerCount: number;
+  totalAmount: number | null;
+  customers: Customer[];
+}
+
 export function buildCustomers(records: PurchaseRecord[], mapping: ColumnMapping): Customer[] {
   const map = new Map<string, Customer>();
 
@@ -22,6 +30,44 @@ export function buildCustomers(records: PurchaseRecord[], mapping: ColumnMapping
   return Array.from(map.values()).sort((a, b) =>
     (a.name || a.email).localeCompare(b.name || b.email, 'ja')
   );
+}
+
+export function buildProjects(customers: Customer[], mapping: ColumnMapping): Project[] {
+  if (!mapping.project) return [];
+
+  const map = new Map<string, { customers: Set<string>; purchases: PurchaseRecord[] }>();
+
+  for (const c of customers) {
+    for (const p of c.purchases) {
+      const name = (p[mapping.project] ?? '').trim();
+      if (!name) continue;
+      if (!map.has(name)) map.set(name, { customers: new Set(), purchases: [] });
+      map.get(name)!.customers.add(c.key);
+      map.get(name)!.purchases.push(p);
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([name, data]) => {
+      const projectCustomers = customers.filter(c => data.customers.has(c.key));
+      let totalAmount: number | null = null;
+      if (mapping.amount) {
+        const sum = data.purchases.reduce((acc, p) => {
+          const raw = (p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
+          const n = parseFloat(raw);
+          return acc + (isNaN(n) ? 0 : n);
+        }, 0);
+        if (sum > 0) totalAmount = sum;
+      }
+      return {
+        name,
+        purchaseCount: data.purchases.length,
+        customerCount: data.customers.size,
+        totalAmount,
+        customers: projectCustomers,
+      };
+    })
+    .sort((a, b) => b.purchaseCount - a.purchaseCount);
 }
 
 export function getUniqueValues(records: PurchaseRecord[], column: string): string[] {

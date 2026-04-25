@@ -1,7 +1,13 @@
 import { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, Users, ShoppingBag, X, Upload, ChevronDown, ChevronUp } from 'lucide-react';
-import { filterCustomers, getUniqueValues } from '../utils/customers';
+import {
+  Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
+  ChevronDown, ChevronUp, BarChart3, TrendingUp, Package
+} from 'lucide-react';
+import { filterCustomers, getUniqueValues, buildProjects } from '../utils/customers';
 import type { Customer, ColumnMapping, PurchaseRecord } from '../types';
+import type { Project } from '../utils/customers';
+
+type Tab = 'customers' | 'projects';
 
 interface Props {
   customers: Customer[];
@@ -13,6 +19,7 @@ interface Props {
 }
 
 export function SearchPanel({ customers, records, mapping, onSelectCustomer, onReimport }: Props) {
+  const [tab, setTab] = useState<Tab>('customers');
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [contentHolder, setContentHolder] = useState('');
@@ -28,158 +35,223 @@ export function SearchPanel({ customers, records, mapping, onSelectCustomer, onR
     () => mapping.project ? getUniqueValues(records, mapping.project) : [],
     [records, mapping.project]
   );
+  const projectData = useMemo(
+    () => buildProjects(customers, mapping),
+    [customers, mapping]
+  );
 
   const filtered = useMemo(
     () => filterCustomers(customers, query, mapping, { contentHolder, project, dateFrom, dateTo }),
     [customers, query, mapping, contentHolder, project, dateFrom, dateTo]
   );
 
+  const filteredProjects = useMemo(() => {
+    if (!query.trim()) return projectData;
+    const q = query.toLowerCase();
+    return projectData.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.customers.some(c => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
+    );
+  }, [projectData, query]);
+
   const activeFilterCount = [contentHolder, project, dateFrom, dateTo].filter(Boolean).length;
+  const totalAmount = useMemo(() => {
+    if (!mapping.amount) return null;
+    return records.reduce((sum, r) => {
+      const raw = (r[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
+      const n = parseFloat(raw);
+      return sum + (isNaN(n) ? 0 : n);
+    }, 0);
+  }, [records, mapping.amount]);
 
   function clearFilters() {
-    setContentHolder('');
-    setProject('');
-    setDateFrom('');
-    setDateTo('');
+    setContentHolder(''); setProject(''); setDateFrom(''); setDateTo('');
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto space-y-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-slate-800">顧客購入履歴 検索</h1>
-            <div className="flex items-center gap-3 text-sm text-slate-500">
-              <span className="flex items-center gap-1">
-                <Users size={14} />
-                {customers.length}名
-              </span>
-              <span className="flex items-center gap-1">
-                <ShoppingBag size={14} />
-                {records.length}件
-              </span>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Top header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="flex items-center justify-between py-3.5">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <BarChart3 size={16} className="text-white" />
+              </div>
+              <span className="text-base font-bold text-slate-800">CustomerInsight</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:flex items-center gap-4 text-sm text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <Users size={14} className="text-blue-400" />
+                  <strong className="text-slate-700">{customers.length}</strong>名
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <ShoppingBag size={14} className="text-blue-400" />
+                  <strong className="text-slate-700">{records.length}</strong>件
+                </span>
+                {totalAmount !== null && (
+                  <span className="flex items-center gap-1.5">
+                    <TrendingUp size={14} className="text-green-400" />
+                    <strong className="text-slate-700">¥{totalAmount.toLocaleString('ja-JP')}</strong>
+                  </span>
+                )}
+              </div>
               <button
                 onClick={onReimport}
-                className="flex items-center gap-1 text-indigo-600 hover:text-indigo-800 transition-colors"
+                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 rounded-lg px-3 py-1.5 transition-colors"
               >
-                <Upload size={14} />
+                <Upload size={13} />
                 再インポート
               </button>
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="名前・メールアドレス・案件名などで検索..."
-                className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              />
-              {query && (
-                <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-            <button
-              onClick={() => setShowFilters(v => !v)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border transition-colors ${
-                activeFilterCount > 0
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
-                  : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <SlidersHorizontal size={16} />
-              絞り込み
-              {activeFilterCount > 0 && (
-                <span className="bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {activeFilterCount}
-                </span>
-              )}
-              {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
+          {/* Tabs */}
+          <div className="flex gap-1">
+            {([['customers', '顧客別', Users], ['projects', '案件別', Package]] as const).map(([key, label, Icon]) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  tab === key
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </button>
+            ))}
           </div>
-
-          {showFilters && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                {contentHolders.length > 0 && (
-                  <div>
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">コンテンツホルダー</label>
-                    <select
-                      value={contentHolder}
-                      onChange={e => setContentHolder(e.target.value)}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    >
-                      <option value="">すべて</option>
-                      {contentHolders.map(v => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
-                )}
-                {projects.length > 0 && (
-                  <div>
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">案件・商品名</label>
-                    <select
-                      value={project}
-                      onChange={e => setProject(e.target.value)}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    >
-                      <option value="">すべて</option>
-                      {projects.map(v => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
-                )}
-                {mapping.date && (
-                  <>
-                    <div>
-                      <label className="text-xs font-medium text-slate-500 mb-1 block">購入日（開始）</label>
-                      <input
-                        type="date"
-                        value={dateFrom}
-                        onChange={e => setDateFrom(e.target.value)}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-slate-500 mb-1 block">購入日（終了）</label>
-                      <input
-                        type="date"
-                        value={dateTo}
-                        onChange={e => setDateTo(e.target.value)}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-              {activeFilterCount > 0 && (
-                <button onClick={clearFilters} className="text-xs text-slate-500 hover:text-red-500 transition-colors">
-                  フィルターをリセット
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-4 space-y-2">
-        {filtered.length === 0 ? (
-          <div className="text-center py-16 text-slate-400">
-            <Search size={40} className="mx-auto mb-3 opacity-30" />
-            <p>条件に一致する顧客が見つかりません</p>
+      {/* Search & filters */}
+      <div className="bg-white border-b border-slate-200 sticky top-[89px] z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex gap-2">
+          <div className="flex-1 relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder={tab === 'customers' ? '名前・メールアドレス・案件名で検索...' : '案件名・顧客名で検索...'}
+              className="w-full pl-9 pr-9 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+            />
+            {query && (
+              <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X size={14} />
+              </button>
+            )}
           </div>
+          {tab === 'customers' && (
+            <button
+              onClick={() => setShowFilters(v => !v)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
+                activeFilterCount > 0
+                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <SlidersHorizontal size={15} />
+              絞り込み
+              {activeFilterCount > 0 && (
+                <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+              {showFilters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+          )}
+        </div>
+
+        {showFilters && tab === 'customers' && (
+          <div className="max-w-5xl mx-auto px-4 pb-3">
+            <div className="bg-blue-50 rounded-xl p-4 grid grid-cols-2 gap-3">
+              {contentHolders.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">コンテンツホルダー</label>
+                  <select value={contentHolder} onChange={e => setContentHolder(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option value="">すべて</option>
+                    {contentHolders.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+              )}
+              {projects.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">案件・商品名</label>
+                  <select value={project} onChange={e => setProject(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <option value="">すべて</option>
+                    {projects.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+              )}
+              {mapping.date && (
+                <>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">購入日（開始）</label>
+                    <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">購入日（終了）</label>
+                    <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  </div>
+                </>
+              )}
+              {activeFilterCount > 0 && (
+                <div className="col-span-2">
+                  <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-red-500 transition-colors font-medium">
+                    フィルターをリセット
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <main className="max-w-5xl mx-auto w-full px-4 py-4 space-y-2">
+        {tab === 'customers' ? (
+          filtered.length === 0 ? (
+            <EmptyState label="顧客が見つかりません" />
+          ) : (
+            <>
+              <p className="text-xs text-slate-400 pb-1 font-medium">{filtered.length}名 を表示</p>
+              {filtered.map(c => (
+                <CustomerCard key={c.key} customer={c} mapping={mapping} onClick={() => onSelectCustomer(c)} />
+              ))}
+            </>
+          )
         ) : (
-          <>
-            <p className="text-xs text-slate-400 pb-1">{filtered.length}名 を表示中</p>
-            {filtered.map(c => (
-              <CustomerCard key={c.key} customer={c} mapping={mapping} onClick={() => onSelectCustomer(c)} />
-            ))}
-          </>
+          filteredProjects.length === 0 ? (
+            <EmptyState label="案件が見つかりません" />
+          ) : (
+            <>
+              <p className="text-xs text-slate-400 pb-1 font-medium">{filteredProjects.length}件の案件</p>
+              {filteredProjects.map(p => (
+                <ProjectCard key={p.name} project={p} onSelectCustomer={onSelectCustomer} mapping={mapping} />
+              ))}
+            </>
+          )
         )}
       </main>
+    </div>
+  );
+}
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="text-center py-20 text-slate-400">
+      <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <Search size={28} className="opacity-40" />
+      </div>
+      <p className="font-medium">{label}</p>
     </div>
   );
 }
@@ -207,21 +279,24 @@ function CustomerCard({ customer, mapping, onClick }: { customer: Customer; mapp
     return Array.from(s);
   }, [customer.purchases, mapping.contentHolder]);
 
+  const initials = (customer.name || customer.email || '?').slice(0, 2).toUpperCase();
+
   return (
     <button
       onClick={onClick}
-      className="w-full bg-white border border-slate-200 rounded-xl p-4 text-left hover:border-indigo-300 hover:shadow-sm transition-all"
+      className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-left hover:border-blue-300 hover:shadow-md transition-all group"
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex items-center gap-4">
+        <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+          {initials}
+        </div>
+        <div className="min-w-0 flex-1">
           <p className="font-semibold text-slate-800 truncate">{customer.name || '(名前なし)'}</p>
-          {customer.email && (
-            <p className="text-sm text-slate-500 truncate">{customer.email}</p>
-          )}
+          {customer.email && <p className="text-sm text-slate-400 truncate">{customer.email}</p>}
           {contentHolders.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
+            <div className="flex flex-wrap gap-1 mt-1.5">
               {contentHolders.map(ch => (
-                <span key={ch} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full px-2 py-0.5">
+                <span key={ch} className="text-xs bg-blue-50 text-blue-600 border border-blue-100 rounded-full px-2 py-0.5 font-medium">
                   {ch}
                 </span>
               ))}
@@ -229,19 +304,77 @@ function CustomerCard({ customer, mapping, onClick }: { customer: Customer; mapp
           )}
         </div>
         <div className="text-right shrink-0 space-y-1">
-          <p className="text-sm font-semibold text-slate-700">
-            {customer.purchases.length}件購入
-          </p>
+          <span className="inline-block bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 py-1 rounded-lg">
+            {customer.purchases.length}件
+          </span>
           {totalAmount !== null && (
-            <p className="text-sm text-green-700 font-medium">
-              ¥{totalAmount.toLocaleString('ja-JP')}
-            </p>
+            <p className="text-sm font-bold text-green-600">¥{totalAmount.toLocaleString('ja-JP')}</p>
           )}
-          {latestDate && (
-            <p className="text-xs text-slate-400">{latestDate}</p>
-          )}
+          {latestDate && <p className="text-xs text-slate-400">{latestDate}</p>}
         </div>
       </div>
     </button>
+  );
+}
+
+function ProjectCard({ project, onSelectCustomer, mapping }: { project: Project; onSelectCustomer: (c: Customer) => void; mapping: ColumnMapping }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-blue-200 transition-colors">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full p-4 text-left"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center shrink-0">
+            <Package size={18} className="text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-slate-800">{project.name}</p>
+            <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+              <span className="flex items-center gap-1"><Users size={11} />{project.customerCount}名</span>
+              <span className="flex items-center gap-1"><ShoppingBag size={11} />{project.purchaseCount}件</span>
+              {project.totalAmount !== null && (
+                <span className="text-green-600 font-semibold">¥{project.totalAmount.toLocaleString('ja-JP')}</span>
+              )}
+            </div>
+          </div>
+          <ChevronDown size={16} className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-slate-100 bg-slate-50 divide-y divide-slate-100">
+          {project.customers.map(c => {
+            const purchases = c.purchases.filter(p => (p[mapping.project] ?? '').trim() === project.name);
+            const amt = mapping.amount ? purchases.reduce((sum, p) => {
+              const raw = (p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
+              const n = parseFloat(raw);
+              return sum + (isNaN(n) ? 0 : n);
+            }, 0) : 0;
+            return (
+              <button
+                key={c.key}
+                onClick={() => onSelectCustomer(c)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-blue-50 transition-colors"
+              >
+                <div className="w-8 h-8 bg-blue-100 text-blue-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
+                  {(c.name || c.email || '?').slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-700 truncate">{c.name || '(名前なし)'}</p>
+                  {c.email && <p className="text-xs text-slate-400 truncate">{c.email}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-semibold text-slate-600">{purchases.length}件</p>
+                  {amt > 0 && <p className="text-xs text-green-600">¥{amt.toLocaleString('ja-JP')}</p>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

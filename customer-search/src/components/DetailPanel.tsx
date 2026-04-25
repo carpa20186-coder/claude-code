@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ArrowLeft, Mail, ShoppingBag, Calendar, DollarSign } from 'lucide-react';
+import { ArrowLeft, Mail, ShoppingBag, TrendingUp, Calendar, BarChart3 } from 'lucide-react';
 import type { Customer, ColumnMapping } from '../types';
 
 interface Props {
@@ -22,50 +22,62 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
 
   const sortedPurchases = useMemo(() => {
     if (!mapping.date) return customer.purchases;
-    return [...customer.purchases].sort((a, b) => {
-      const da = (a[mapping.date] ?? '');
-      const db = (b[mapping.date] ?? '');
-      return db.localeCompare(da);
-    });
+    return [...customer.purchases].sort((a, b) =>
+      (b[mapping.date] ?? '').localeCompare(a[mapping.date] ?? '')
+    );
   }, [customer.purchases, mapping.date]);
 
   const displayColumns = useMemo(() => {
-    const keyFields = [mapping.name, mapping.email].filter(Boolean);
+    const keyFields = [mapping.name, mapping.email, mapping.date, mapping.amount].filter(Boolean);
     return columns.filter(c => !keyFields.includes(c));
   }, [columns, mapping]);
 
+  const initials = (customer.name || customer.email || '?').slice(0, 2).toUpperCase();
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors mb-3 text-sm"
-          >
-            <ArrowLeft size={16} />
-            検索一覧に戻る
-          </button>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800">
-                {customer.name || '(名前なし)'}
-              </h2>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-3">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <BarChart3 size={16} className="text-white" />
+            </div>
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-blue-600 transition-colors"
+            >
+              <ArrowLeft size={15} />
+              一覧に戻る
+            </button>
+          </div>
+          <div className="flex items-center gap-4 mt-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 text-white rounded-2xl flex items-center justify-center font-bold text-lg shrink-0">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl font-bold text-slate-900 truncate">{customer.name || '(名前なし)'}</h2>
               {customer.email && (
-                <p className="flex items-center gap-1.5 text-slate-500 mt-1 text-sm">
-                  <Mail size={14} />
+                <p className="flex items-center gap-1.5 text-slate-400 text-sm mt-0.5">
+                  <Mail size={13} />
                   {customer.email}
                 </p>
               )}
             </div>
-            <div className="text-right space-y-1 shrink-0">
-              <div className="flex items-center gap-1.5 justify-end text-slate-600">
-                <ShoppingBag size={16} />
-                <span className="font-semibold">{customer.purchases.length}件</span>
+            <div className="hidden sm:flex items-center gap-4 shrink-0">
+              <div className="text-center">
+                <div className="flex items-center gap-1.5 text-blue-600 font-bold text-xl">
+                  <ShoppingBag size={16} />
+                  {customer.purchases.length}
+                </div>
+                <p className="text-xs text-slate-400">購入件数</p>
               </div>
               {totalAmount !== null && (
-                <div className="flex items-center gap-1.5 justify-end text-green-700">
-                  <DollarSign size={16} />
-                  <span className="font-semibold">¥{totalAmount.toLocaleString('ja-JP')}</span>
+                <div className="text-center">
+                  <div className="flex items-center gap-1.5 text-green-600 font-bold text-xl">
+                    <TrendingUp size={16} />
+                    ¥{totalAmount.toLocaleString('ja-JP')}
+                  </div>
+                  <p className="text-xs text-slate-400">合計金額</p>
                 </div>
               )}
             </div>
@@ -73,33 +85,42 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">購入履歴</h3>
+      <main className="max-w-5xl mx-auto w-full px-4 py-5 space-y-3">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">購入履歴</h3>
 
         {sortedPurchases.map((p, i) => (
-          <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              {mapping.date && p[mapping.date] && (
-                <span className="flex items-center gap-1.5 text-slate-500 text-sm">
-                  <Calendar size={14} />
-                  {p[mapping.date]}
-                </span>
-              )}
+          <div key={i} className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-blue-200 transition-colors">
+            <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                {mapping.date && p[mapping.date] && (
+                  <>
+                    <Calendar size={13} className="text-blue-400" />
+                    <span className="font-medium text-slate-600">{p[mapping.date]}</span>
+                  </>
+                )}
+                {mapping.project && p[mapping.project] && (
+                  <span className="bg-blue-50 text-blue-700 border border-blue-100 text-xs font-medium px-2 py-0.5 rounded-full">
+                    {p[mapping.project]}
+                  </span>
+                )}
+              </div>
               {mapping.amount && p[mapping.amount] && (
-                <span className="font-semibold text-green-700">
-                  {p[mapping.amount].match(/[¥￥]/) ? p[mapping.amount] : `¥${p[mapping.amount]}`}
+                <span className="font-bold text-green-600">
+                  {p[mapping.amount].match(/[¥￥]/) ? p[mapping.amount] : `¥${Number(p[mapping.amount].replace(/[,\s]/g, '')).toLocaleString('ja-JP')}`}
                 </span>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-              {displayColumns.filter(c => p[c]?.trim()).map(col => (
-                <div key={col}>
-                  <p className="text-xs text-slate-400">{col}</p>
-                  <p className="text-sm text-slate-700 font-medium break-words">{p[col]}</p>
-                </div>
-              ))}
-            </div>
+            {displayColumns.filter(c => p[c]?.trim()).length > 0 && (
+              <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                {displayColumns.filter(c => p[c]?.trim()).map(col => (
+                  <div key={col}>
+                    <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">{col}</p>
+                    <p className="text-sm text-slate-700 font-medium break-words">{p[col]}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </main>
