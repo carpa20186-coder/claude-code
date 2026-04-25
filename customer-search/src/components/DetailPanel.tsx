@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { ArrowLeft, Mail, ShoppingBag, TrendingUp, Calendar, BarChart3, Layers } from 'lucide-react';
 import type { Customer, ColumnMapping } from '../types';
+import { getCustomerStats } from '../utils/analytics';
 
 interface Props {
   customer: Customer;
@@ -17,15 +18,8 @@ const HIDDEN_COLUMNS = new Set([
 ]);
 
 export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
-  const totalAmount = useMemo(() => {
-    if (!mapping.amount) return null;
-    const total = customer.purchases.reduce((sum, p) => {
-      const raw = (p['_totalPrice'] ?? p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
-      const n = parseFloat(raw);
-      return sum + (isNaN(n) ? 0 : n);
-    }, 0);
-    return total > 0 ? total : null;
-  }, [customer.purchases, mapping.amount]);
+  const customerStats = useMemo(() => getCustomerStats(customer, mapping), [customer, mapping]);
+  const totalAmount = customerStats.totalAmount > 0 ? customerStats.totalAmount : null;
 
   const sortedPurchases = useMemo(() => {
     if (!mapping.date) return customer.purchases;
@@ -107,6 +101,14 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
                     ¥{totalAmount.toLocaleString('ja-JP')}
                   </div>
                   <p className="text-xs text-slate-400">契約総額</p>
+                </div>
+              )}
+              {customerStats.averagePurchaseIntervalDays !== null && (
+                <div className="text-center">
+                  <div className="text-slate-700 font-bold text-xl">
+                    {Math.round(customerStats.averagePurchaseIntervalDays)}日
+                  </div>
+                  <p className="text-xs text-slate-400">平均購入間隔</p>
                 </div>
               )}
             </div>

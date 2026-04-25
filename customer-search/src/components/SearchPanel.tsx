@@ -1,10 +1,18 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, type ReactNode } from 'react';
 import {
   Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
   ChevronDown, ChevronUp, BarChart3, TrendingUp, Package,
-  RefreshCw, Clock, Settings2, Columns3, Crown, Tag,
+  RefreshCw, Clock, Settings2, Columns3, Crown, Tag, Download, LineChart, AlertTriangle,
 } from 'lucide-react';
 import { filterCustomers, getUniqueValues, buildProjects, buildHolders } from '../utils/customers';
+import {
+  buildCrossSellPairs,
+  buildMonthlyTrend,
+  buildSummaryMetrics,
+  downloadCsv,
+  getCustomerStats,
+  isDormantCustomer,
+} from '../utils/analytics';
 import { RulesPanel } from './RulesPanel';
 import type { Customer, ColumnMapping, PurchaseRecord, SyncConfig, GoogleUser, ClassificationRule } from '../types';
 import type { Project, Holder } from '../utils/customers';
@@ -28,14 +36,6 @@ interface Props {
   onRulesChange: (rules: ClassificationRule[]) => void;
 }
 
-function getCustomerTotal(customer: Customer, amountCol: string): number {
-  return customer.purchases.reduce((sum, p) => {
-    const raw = (p['_totalPrice'] ?? p[amountCol] ?? '').replace(/[¥,￥\s]/g, '');
-    const n = parseFloat(raw);
-    return sum + (isNaN(n) ? 0 : n);
-  }, 0);
-}
-
 export function SearchPanel({
   customers, records, mapping, onSelectCustomer, onReimport, onConfigureMapping,
   syncConfig, syncing, onManualSync, googleUser, onSyncIntervalChange,
@@ -46,6 +46,10 @@ export function SearchPanel({
   const [showFilters, setShowFilters] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showVipOnly, setShowVipOnly] = useState(false);
+  const [dormantMonths, setDormantMonths] = useState<number>(() => {
+    const saved = localStorage.getItem('dormantMonths');
+    return saved ? Number.parseInt(saved, 10) : 6;
+  });
   const [vipThreshold, setVipThreshold] = useState<number>(() => {
     const s = localStorage.getItem('vipThreshold');
     return s ? parseInt(s) : 300000;
@@ -55,17 +59,17 @@ export function SearchPanel({
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  const customerTotals = useMemo(() => {
-    const map = new Map<string, number>();
+  const customerStats = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getCustomerStats>>();
     for (const c of customers) {
-      map.set(c.key, getCustomerTotal(c, mapping.amount));
+      map.set(c.key, getCustomerStats(c, mapping));
     }
     return map;
-  }, [customers, mapping.amount]);
+  }, [customers, mapping]);
 
   const isVip = useCallback(
-    (c: Customer) => (customerTotals.get(c.key) ?? 0) >= vipThreshold,
-    [customerTotals, vipThreshold]
+    (c: Customer) => (customerStats.get(c.key)?.totalAmount ?? 0) >= vipThreshold,
+    [customerStats, vipThreshold]
   );
 
   const vipCount = useMemo(() => customers.filter(isVip).length, [customers, isVip]);
@@ -92,10 +96,10 @@ export function SearchPanel({
   const displayedCustomers = useMemo(() => {
     let list = showVipOnly ? filtered.filter(isVip) : filtered;
     if (showVipOnly) {
-      list = [...list].sort((a, b) => (customerTotals.get(b.key) ?? 0) - (customerTotals.get(a.key) ?? 0));
+      list = [...list].sort((a, b) => (customerStats.get(b.key)?.totalAmount ?? 0) - (customerStats.get(a.key)?.totalAmount ?? 0));
     }
     return list;
-  }, [filtered, showVipOnly, isVip, customerTotals]);
+  }, [filtered, showVipOnly, isVip, customerStats]);
 
   const filteredProjects = useMemo(() => {
     if (!query.trim()) return projectData;
@@ -125,13 +129,71 @@ export function SearchPanel({
     }, 0);
   }, [records, mapping.amount]);
 
+  const summaryMetrics = useMemo(
+    () => buildSummaryMetrics(displayedCustomers, mapping, dormantMonths),
+    [displayedCustomers, mapping, dormantMonths]
+  );
+
+  const monthlyTrend = useMemo(() => {
+    const visibleKeys = new Set(displayedCustomers.map((customer) => customer.key));
+    const visibleRecords = records.filter((record) => {
+      const name = (record[mapping.name] ?? '').trim();
+      const email = (record[mapping.email] ?? '').trim().toLowerCase();
+      const key = email || name;
+      return key ? visibleKeys.has(key) : false;
+    });
+    return buildMonthlyTrend(visibleRecords, mapping);
+  }, [displayedCustomers, records, mapping]);
+
+  const crossSellPairs = useMemo(
+    () => buildCrossSellPairs(displayedCustomers),
+    [displayedCustomers]
+  );
+
+  const dormantKeys = useMemo(() => new Set(
+    displayedCustomers
+      .filter((customer) => isDormantCustomer(customer, mapping, dormantMonths))
+      .map((customer) => customer.key)
+  ), [displayedCustomers, mapping, dormantMonths]);
+
   function handleVipThresholdChange(value: number) {
     setVipThreshold(value);
     localStorage.setItem('vipThreshold', String(value));
   }
 
+  function handleDormantMonthsChange(value: number) {
+    setDormantMonths(value);
+    localStorage.setItem('dormantMonths', String(value));
+  }
+
   function clearFilters() {
     setContentHolder(''); setProject(''); setDateFrom(''); setDateTo('');
+  }
+
+  function handleExportCsv() {
+    const header = ['顧客名', 'メールアドレス', '購入件数', 'LTV', '平均購入間隔(日)', '最終購入日', '休眠フラグ', 'ホルダー'];
+    const rows = displayedCustomers.map((customer) => {
+      const stats = customerStats.get(customer.key) ?? getCustomerStats(customer, mapping);
+      const holders = Array.from(new Set(
+        customer.purchases
+          .map((purchase) => (purchase['_contentHolder'] ?? '').trim())
+          .filter(Boolean)
+      )).join(' / ');
+
+      return [
+        customer.name || '',
+        customer.email || '',
+        String(customer.purchases.length),
+        String(Math.round(stats.totalAmount)),
+        stats.averagePurchaseIntervalDays !== null ? String(Math.round(stats.averagePurchaseIntervalDays)) : '',
+        stats.lastPurchaseDate ?? '',
+        dormantKeys.has(customer.key) ? '要フォロー' : '',
+        holders,
+      ];
+    });
+
+    const dateLabel = new Date().toISOString().slice(0, 10);
+    downloadCsv(`customer-search-${dateLabel}.csv`, [header, ...rows]);
   }
 
   return (
@@ -223,6 +285,13 @@ export function SearchPanel({
                 >
                   <Upload size={13} />
                   インポート
+                </button>
+                <button
+                  onClick={handleExportCsv}
+                  className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:text-emerald-800 border border-emerald-200 hover:border-emerald-400 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <Download size={13} />
+                  CSV出力
                 </button>
               </div>
             </div>
@@ -398,6 +467,51 @@ export function SearchPanel({
 
       {/* Content */}
       <main className="max-w-5xl mx-auto w-full px-4 py-4 space-y-2">
+        {tab === 'customers' && (
+          <>
+            <section className="grid gap-3 md:grid-cols-4 mb-4">
+              <SummaryCard
+                label="平均LTV"
+                value={summaryMetrics.averageLtv !== null ? `¥${Math.round(summaryMetrics.averageLtv).toLocaleString('ja-JP')}` : '-'}
+                accent="blue"
+              />
+              <SummaryCard
+                label="中央値LTV"
+                value={summaryMetrics.medianLtv !== null ? `¥${Math.round(summaryMetrics.medianLtv).toLocaleString('ja-JP')}` : '-'}
+                accent="violet"
+              />
+              <SummaryCard
+                label="リピート率"
+                value={summaryMetrics.repeatRate !== null ? `${Math.round(summaryMetrics.repeatRate * 100)}%` : '-'}
+                subValue={`${displayedCustomers.filter(customer => customer.purchases.length >= 2).length} / ${displayedCustomers.length}名`}
+                accent="emerald"
+              />
+              <SummaryCard
+                label="要フォロー"
+                value={`${summaryMetrics.dormantCount}名`}
+                subValue={summaryMetrics.dormantRate !== null ? `${Math.round(summaryMetrics.dormantRate * 100)}%` : undefined}
+                accent="amber"
+                control={(
+                  <select
+                    value={dormantMonths}
+                    onChange={(event) => handleDormantMonthsChange(Number(event.target.value))}
+                    className="bg-transparent text-xs font-medium focus:outline-none"
+                  >
+                    {[3, 6, 9, 12].map((month) => (
+                      <option key={month} value={month}>{month}ヶ月</option>
+                    ))}
+                  </select>
+                )}
+              />
+            </section>
+
+            <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)] mb-4">
+              <MonthlyTrendCard trend={monthlyTrend} />
+              <CrossSellCard pairs={crossSellPairs} />
+            </section>
+          </>
+        )}
+
         {tab === 'customers' ? (
           displayedCustomers.length === 0 ? (
             <EmptyState label={showVipOnly ? 'VIP顧客が見つかりません' : '顧客が見つかりません'} />
@@ -414,7 +528,9 @@ export function SearchPanel({
                   mapping={mapping}
                   onClick={() => onSelectCustomer(c)}
                   isVip={isVip(c)}
-                  total={customerTotals.get(c.key) ?? 0}
+                  total={customerStats.get(c.key)?.totalAmount ?? 0}
+                  averageIntervalDays={customerStats.get(c.key)?.averagePurchaseIntervalDays ?? null}
+                  isDormant={dormantKeys.has(c.key)}
                 />
               ))}
             </>
@@ -459,13 +575,15 @@ function EmptyState({ label }: { label: string }) {
 }
 
 function CustomerCard({
-  customer, mapping, onClick, isVip, total,
+  customer, mapping, onClick, isVip, total, averageIntervalDays, isDormant,
 }: {
   customer: Customer;
   mapping: ColumnMapping;
   onClick: () => void;
   isVip: boolean;
   total: number;
+  averageIntervalDays: number | null;
+  isDormant: boolean;
 }) {
   const latestDate = useMemo(() => {
     if (!mapping.date) return null;
@@ -490,6 +608,8 @@ function CustomerCard({
       className={`w-full bg-white border rounded-2xl p-4 text-left hover:shadow-md transition-all group ${
         isVip
           ? 'border-amber-200 hover:border-amber-300 ring-1 ring-amber-100'
+          : isDormant
+            ? 'border-rose-200 hover:border-rose-300 ring-1 ring-rose-100'
           : 'border-slate-200 hover:border-blue-300'
       }`}
     >
@@ -516,6 +636,12 @@ function CustomerCard({
                 VIP
               </span>
             )}
+            {isDormant && (
+              <span className="text-xs bg-rose-50 text-rose-600 border border-rose-200 rounded-full px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                <AlertTriangle size={11} />
+                要フォロー
+              </span>
+            )}
           </div>
           {customer.email && <p className="text-sm text-slate-400 truncate">{customer.email}</p>}
           {contentHolders.length > 0 && (
@@ -537,10 +663,145 @@ function CustomerCard({
               ¥{total.toLocaleString('ja-JP')}
             </p>
           )}
+          {averageIntervalDays !== null && (
+            <p className="text-xs text-slate-500">平均 {Math.round(averageIntervalDays)}日おき</p>
+          )}
           {latestDate && <p className="text-xs text-slate-400">{latestDate}</p>}
         </div>
       </div>
     </button>
+  );
+}
+
+function SummaryCard({
+  label, value, subValue, accent, control,
+}: {
+  label: string;
+  value: string;
+  subValue?: string;
+  accent: 'blue' | 'violet' | 'emerald' | 'amber';
+  control?: ReactNode;
+}) {
+  const accentClass = {
+    blue: 'from-blue-50 to-white border-blue-100 text-blue-700',
+    violet: 'from-violet-50 to-white border-violet-100 text-violet-700',
+    emerald: 'from-emerald-50 to-white border-emerald-100 text-emerald-700',
+    amber: 'from-amber-50 to-white border-amber-100 text-amber-700',
+  }[accent];
+
+  return (
+    <div className={`rounded-2xl border bg-gradient-to-br p-4 ${accentClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
+          {subValue && <p className="mt-1 text-xs font-medium text-slate-500">{subValue}</p>}
+        </div>
+        {control}
+      </div>
+    </div>
+  );
+}
+
+function MonthlyTrendCard({ trend }: { trend: ReturnType<typeof buildMonthlyTrend> }) {
+  const width = 560;
+  const height = 220;
+  const padding = 28;
+
+  if (trend.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <LineChart size={16} className="text-blue-500" />
+          <h3 className="font-semibold text-slate-800">月次購入トレンド</h3>
+        </div>
+        <p className="text-sm text-slate-400">日付列があると、月別の新規契約数と売上を表示できます。</p>
+      </div>
+    );
+  }
+
+  const maxCount = Math.max(...trend.map((point) => point.count), 1);
+  const maxRevenue = Math.max(...trend.map((point) => point.revenue), 1);
+  const stepX = trend.length > 1 ? (width - padding * 2) / (trend.length - 1) : 0;
+
+  const countPath = trend.map((point, index) => {
+    const x = padding + stepX * index;
+    const y = height - padding - ((point.count / maxCount) * (height - padding * 2));
+    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+
+  const revenuePath = trend.map((point, index) => {
+    const x = padding + stepX * index;
+    const y = height - padding - ((point.revenue / maxRevenue) * (height - padding * 2));
+    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-5">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <LineChart size={16} className="text-blue-500" />
+            <h3 className="font-semibold text-slate-800">月次購入トレンド</h3>
+          </div>
+          <p className="text-sm text-slate-400 mt-1">新規契約数と売上の動きを月ごとに確認できます。</p>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="flex items-center gap-1.5 text-blue-600"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" />契約数</span>
+          <span className="flex items-center gap-1.5 text-emerald-600"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />売上</span>
+        </div>
+      </div>
+
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#e2e8f0" strokeWidth="1" />
+        <path d={countPath} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" />
+        <path d={revenuePath} fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" />
+        {trend.map((point, index) => {
+          const x = padding + stepX * index;
+          const countY = height - padding - ((point.count / maxCount) * (height - padding * 2));
+          const revenueY = height - padding - ((point.revenue / maxRevenue) * (height - padding * 2));
+          return (
+            <g key={point.month}>
+              <circle cx={x} cy={countY} r="4" fill="#3b82f6" />
+              <circle cx={x} cy={revenueY} r="4" fill="#10b981" />
+              <text x={x} y={height - 8} textAnchor="middle" fontSize="10" fill="#64748b">{point.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function CrossSellCard({ pairs }: { pairs: ReturnType<typeof buildCrossSellPairs> }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Tag size={16} className="text-violet-500" />
+        <h3 className="font-semibold text-slate-800">クロスセル分析</h3>
+      </div>
+      <p className="text-sm text-slate-400 mb-4">ホルダーAの購入者が、別ホルダーも買っている割合です。</p>
+
+      {pairs.length === 0 ? (
+        <p className="text-sm text-slate-400">複数ホルダーを横断した購入データが増えると表示されます。</p>
+      ) : (
+        <div className="space-y-3">
+          {pairs.map((pair) => (
+            <div key={`${pair.baseHolder}-${pair.targetHolder}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <p className="font-semibold text-slate-700">{pair.baseHolder} → {pair.targetHolder}</p>
+                <p className="font-bold text-violet-600">{Math.round(pair.rate * 100)}%</p>
+              </div>
+              <div className="mt-2 h-2.5 rounded-full bg-slate-200 overflow-hidden">
+                <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.max(pair.rate * 100, 4)}%` }} />
+              </div>
+              <p className="mt-2 text-xs text-slate-500">{pair.customerCount} / {pair.totalBaseCustomers}名が両方購入</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
