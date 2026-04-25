@@ -7,11 +7,20 @@ const CONTENT_HOLDER_CANDIDATES = ['コンテンツホルダー', 'コンテン�
 const PROJECT_CANDIDATES = ['product_name', 'course_name', '案件', '案件名', 'プロジェクト', 'project', 'item', '商品名', '商品'];
 const DATE_CANDIDATES = ['日付', '購入日', '購入日時', 'date', 'purchase_date', 'created_at', 'ordered_at'];
 const AMOUNT_CANDIDATES = ['final_price', '金額', '価格', '購入金額', 'amount', 'price', 'total'];
+const PREFERRED_SHEET_NAMES = ['全体（未来教育）', '全体(未来教育)', '全体', '未来教育'];
+
+function normalizeHeader(value: string): string {
+  return value
+    .replace(/﻿/g, '')
+    .replace(/\s+/g, '')
+    .trim()
+    .toLowerCase();
+}
 
 function findColumn(headers: string[], candidates: string[]): string {
-  const lower = headers.map(h => h.toLowerCase().trim());
+  const lower = headers.map((h) => normalizeHeader(h));
   for (const c of candidates) {
-    const idx = lower.indexOf(c.toLowerCase());
+    const idx = lower.indexOf(normalizeHeader(c));
     if (idx !== -1) return headers[idx];
   }
   return '';
@@ -54,19 +63,9 @@ function isHtml(text: string) {
   return t.startsWith('<!DOCTYPE') || t.startsWith('<html') || t.startsWith('<HTML');
 }
 
-export async function fetchGoogleSheet(url: string): Promise<string> {
-  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  if (!match) throw new Error('無効なGoogle スプレッドシートURLです');
-  const id = match[1];
-
-  const gidMatch = url.match(/[#&?]gid=(\d+)/);
-  const gid = gidMatch ? gidMatch[1] : '0';
-
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
-
-  // Try direct fetch first
+async function fetchTextWithProxyFallback(url: string): Promise<string> {
   try {
-    const resp = await fetch(csvUrl);
+    const resp = await fetch(url);
     if (resp.ok) {
       const text = await resp.text();
       if (!isHtml(text)) return text;
@@ -75,21 +74,20 @@ export async function fetchGoogleSheet(url: string): Promise<string> {
     // CORS blocked — fall through to proxy
   }
 
-  // CORS proxy fallback (allorigins.win)
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(csvUrl)}`;
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
   let resp: Response;
   try {
     resp = await fetch(proxyUrl);
   } catch {
     throw new Error(
-      'スプレッドシートの取得に失敗しました。\n' +
+      'スプレッドシートの取得に失敗しました\n' +
       'スプレッドシートの共有設定を「リンクを知っている全員が閲覧可能」にしてから再試行してください。'
     );
   }
 
   if (!resp.ok) {
     throw new Error(
-      `取得に失敗しました (${resp.status})。\n` +
+      `取得に失敗しました (${resp.status})\n` +
       'スプレッドシートが「リンクを知っている全員が閲覧可能」になっているか確認してください。'
     );
   }
@@ -103,4 +101,34 @@ export async function fetchGoogleSheet(url: string): Promise<string> {
     );
   }
   return text;
+}
+
+export async function fetchGoogleSheet(url: string): Promise<string> {
+  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (!match) throw new Error('無効なGoogle スプレッドシートURLです');
+  const id = match[1];
+
+  const gidMatch = url.match(/[#&?]gid=(\d+)/);
+  const gid = gidMatch ? gidMatch[1] : null;
+
+  if (gid) {
+    return fetchTextWithProxyFallback(
+      `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`
+    );
+  }
+
+  for (const sheetName of PREFERRED_SHEET_NAMES) {
+    try {
+      const text = await fetchTextWithProxyFallback(
+        `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
+      );
+      if (!isHtml(text)) return text;
+    } catch {
+      // Try the next preferred sheet name before falling back to the first tab.
+    }
+  }
+
+  return fetchTextWithProxyFallback(
+    `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=0`
+  );
 }
