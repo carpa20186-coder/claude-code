@@ -115,9 +115,16 @@ export function ImportPanel({ onImport }: Props) {
         )}
 
         {error && (
-          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">
-            <AlertCircle size={16} className="mt-0.5 shrink-0" />
-            <span>{error}</span>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              <span className="font-medium">読み込みに失敗しました</span>
+            </div>
+            <p className="whitespace-pre-wrap text-red-600 text-xs leading-relaxed">{error.replace(/^Error:\s*/,'')}</p>
+            <div className="border-t border-red-200 pt-2 text-xs text-red-500 space-y-1">
+              <p className="font-medium">💡 CSVでインポートする方法：</p>
+              <p>スプレッドシートを開き、「ファイル」→「ダウンロード」→「カンマ区切り (.csv)」でダウンロードして上のエリアにドロップしてください。</p>
+            </div>
           </div>
         )}
       </div>

@@ -49,6 +49,11 @@ export async function parseCSVText(text: string): Promise<{ records: PurchaseRec
   });
 }
 
+function isHtml(text: string) {
+  const t = text.trimStart();
+  return t.startsWith('<!DOCTYPE') || t.startsWith('<html') || t.startsWith('<HTML');
+}
+
 export async function fetchGoogleSheet(url: string): Promise<string> {
   const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   if (!match) throw new Error('無効なGoogle スプレッドシートURLです');
@@ -58,7 +63,44 @@ export async function fetchGoogleSheet(url: string): Promise<string> {
   const gid = gidMatch ? gidMatch[1] : '0';
 
   const csvUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
-  const resp = await fetch(csvUrl);
-  if (!resp.ok) throw new Error(`スプレッドシートの取得に失敗しました (${resp.status})`);
-  return resp.text();
+
+  // Try direct fetch first
+  try {
+    const resp = await fetch(csvUrl);
+    if (resp.ok) {
+      const text = await resp.text();
+      if (!isHtml(text)) return text;
+    }
+  } catch {
+    // CORS blocked — fall through to proxy
+  }
+
+  // CORS proxy fallback (allorigins.win)
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(csvUrl)}`;
+  let resp: Response;
+  try {
+    resp = await fetch(proxyUrl);
+  } catch {
+    throw new Error(
+      'スプレッドシートの取得に失敗しました。\n' +
+      'スプレッドシートの共有設定を「リンクを知っている全員が閲覧可能」にしてから再試行してください。'
+    );
+  }
+
+  if (!resp.ok) {
+    throw new Error(
+      `取得に失敗しました (${resp.status})。\n` +
+      'スプレッドシートが「リンクを知っている全員が閲覧可能」になっているか確認してください。'
+    );
+  }
+
+  const text = await resp.text();
+  if (isHtml(text)) {
+    throw new Error(
+      'スプレッドシートが非公開のためアクセスできません。\n\n' +
+      '【設定方法】スプレッドシート右上の「共有」→「リンクを知っている全員が閲覧可能」に変更してください。\n\n' +
+      'または「ファイル → ダウンロード → CSV」でCSVをダウンロードしてインポートしてください。'
+    );
+  }
+  return text;
 }
