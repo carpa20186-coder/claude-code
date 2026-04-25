@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
   ChevronDown, ChevronUp, BarChart3, TrendingUp, Package,
-  RefreshCw, Clock, Settings2, Columns3,
+  RefreshCw, Clock, Settings2, Columns3, Crown,
 } from 'lucide-react';
 import { filterCustomers, getUniqueValues, buildProjects } from '../utils/customers';
 import { RulesPanel } from './RulesPanel';
@@ -28,10 +28,12 @@ interface Props {
   onRulesChange: (rules: ClassificationRule[]) => void;
 }
 
-function getAmount(rec: PurchaseRecord, amountCol: string): number {
-  const raw = (rec['_totalPrice'] ?? rec[amountCol] ?? '').replace(/[¥,￥\s]/g, '');
-  const n = parseFloat(raw);
-  return isNaN(n) ? 0 : n;
+function getCustomerTotal(customer: Customer, amountCol: string): number {
+  return customer.purchases.reduce((sum, p) => {
+    const raw = (p['_totalPrice'] ?? p[amountCol] ?? '').replace(/[¥,￥\s]/g, '');
+    const n = parseFloat(raw);
+    return sum + (isNaN(n) ? 0 : n);
+  }, 0);
 }
 
 export function SearchPanel({
@@ -43,10 +45,30 @@ export function SearchPanel({
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showVipOnly, setShowVipOnly] = useState(false);
+  const [vipThreshold, setVipThreshold] = useState<number>(() => {
+    const s = localStorage.getItem('vipThreshold');
+    return s ? parseInt(s) : 300000;
+  });
   const [contentHolder, setContentHolder] = useState('');
   const [project, setProject] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+
+  const customerTotals = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of customers) {
+      map.set(c.key, getCustomerTotal(c, mapping.amount));
+    }
+    return map;
+  }, [customers, mapping.amount]);
+
+  const isVip = useCallback(
+    (c: Customer) => (customerTotals.get(c.key) ?? 0) >= vipThreshold,
+    [customerTotals, vipThreshold]
+  );
+
+  const vipCount = useMemo(() => customers.filter(isVip).length, [customers, isVip]);
 
   const contentHolders = useMemo(() => {
     if (records.some(r => r['_contentHolder'] !== undefined)) {
@@ -59,15 +81,20 @@ export function SearchPanel({
     () => mapping.project ? getUniqueValues(records, mapping.project) : [],
     [records, mapping.project]
   );
-  const projectData = useMemo(
-    () => buildProjects(customers, mapping),
-    [customers, mapping]
-  );
+  const projectData = useMemo(() => buildProjects(customers, mapping), [customers, mapping]);
 
   const filtered = useMemo(
     () => filterCustomers(customers, query, mapping, { contentHolder, project, dateFrom, dateTo }),
     [customers, query, mapping, contentHolder, project, dateFrom, dateTo]
   );
+
+  const displayedCustomers = useMemo(() => {
+    let list = showVipOnly ? filtered.filter(isVip) : filtered;
+    if (showVipOnly) {
+      list = [...list].sort((a, b) => (customerTotals.get(b.key) ?? 0) - (customerTotals.get(a.key) ?? 0));
+    }
+    return list;
+  }, [filtered, showVipOnly, isVip, customerTotals]);
 
   const filteredProjects = useMemo(() => {
     if (!query.trim()) return projectData;
@@ -81,8 +108,17 @@ export function SearchPanel({
   const activeFilterCount = [contentHolder, project, dateFrom, dateTo].filter(Boolean).length;
   const totalAmount = useMemo(() => {
     if (!mapping.amount) return null;
-    return records.reduce((sum, r) => sum + getAmount(r, mapping.amount), 0);
+    return records.reduce((sum, r) => {
+      const raw = (r['_totalPrice'] ?? r[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
+      const n = parseFloat(raw);
+      return sum + (isNaN(n) ? 0 : n);
+    }, 0);
   }, [records, mapping.amount]);
+
+  function handleVipThresholdChange(value: number) {
+    setVipThreshold(value);
+    localStorage.setItem('vipThreshold', String(value));
+  }
 
   function clearFilters() {
     setContentHolder(''); setProject(''); setDateFrom(''); setDateTo('');
@@ -110,6 +146,12 @@ export function SearchPanel({
                   <Users size={14} className="text-blue-400" />
                   <strong className="text-slate-700">{customers.length}</strong>名
                 </span>
+                {vipCount > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <Crown size={13} className="text-amber-400" />
+                    <strong className="text-amber-600">VIP {vipCount}</strong>名
+                  </span>
+                )}
                 <span className="flex items-center gap-1.5">
                   <ShoppingBag size={14} className="text-blue-400" />
                   <strong className="text-slate-700">{records.length}</strong>件
@@ -154,7 +196,6 @@ export function SearchPanel({
                 <button
                   onClick={() => setShowRules(true)}
                   className="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg px-3 py-1.5 transition-colors"
-                  title="分類ルール設定"
                 >
                   <Settings2 size={13} />
                   <span className="hidden sm:inline">ルール</span>
@@ -162,7 +203,6 @@ export function SearchPanel({
                 <button
                   onClick={onConfigureMapping}
                   className="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg px-3 py-1.5 transition-colors"
-                  title="列の設定"
                 >
                   <Columns3 size={13} />
                   <span className="hidden sm:inline">列設定</span>
@@ -217,25 +257,85 @@ export function SearchPanel({
             )}
           </div>
           {tab === 'customers' && (
-            <button
-              onClick={() => setShowFilters(v => !v)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
-                activeFilterCount > 0
-                  ? 'bg-blue-50 border-blue-300 text-blue-700'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <SlidersHorizontal size={15} />
-              絞り込み
-              {activeFilterCount > 0 && (
-                <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {activeFilterCount}
-                </span>
-              )}
-              {showFilters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
+            <>
+              {/* VIP toggle */}
+              <button
+                onClick={() => setShowVipOnly(v => !v)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
+                  showVipOnly
+                    ? 'bg-amber-50 border-amber-300 text-amber-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Crown size={15} className={showVipOnly ? 'text-amber-500' : 'text-slate-400'} />
+                VIP
+                {showVipOnly && vipCount > 0 && (
+                  <span className="bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                    {vipCount}
+                  </span>
+                )}
+              </button>
+              {/* Other filters */}
+              <button
+                onClick={() => setShowFilters(v => !v)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
+                  activeFilterCount > 0
+                    ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <SlidersHorizontal size={15} />
+                絞り込み
+                {activeFilterCount > 0 && (
+                  <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+                {showFilters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+            </>
           )}
         </div>
+
+        {/* VIP threshold config */}
+        {showVipOnly && tab === 'customers' && (
+          <div className="max-w-5xl mx-auto px-4 pb-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap">
+              <Crown size={15} className="text-amber-500 shrink-0" />
+              <span className="text-xs font-semibold text-amber-700">VIP基準（契約総額）</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-amber-600">¥</span>
+                <input
+                  type="number"
+                  value={vipThreshold}
+                  onChange={e => handleVipThresholdChange(parseInt(e.target.value) || 0)}
+                  className="w-28 border border-amber-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 text-slate-700"
+                  step={100000}
+                  min={0}
+                />
+                <span className="text-xs text-amber-600">以上</span>
+              </div>
+              <div className="flex items-center gap-1.5 ml-1">
+                {[100000, 300000, 500000, 1000000].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => handleVipThresholdChange(v)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                      vipThreshold === v
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400'
+                    }`}
+                  >
+                    {v >= 10000 ? `${v / 10000}万` : v.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+              <span className="ml-auto text-xs font-bold text-amber-700">
+                {vipCount}名が対象
+              </span>
+            </div>
+          </div>
+        )}
 
         {showFilters && tab === 'customers' && (
           <div className="max-w-5xl mx-auto px-4 pb-3">
@@ -289,13 +389,23 @@ export function SearchPanel({
       {/* Content */}
       <main className="max-w-5xl mx-auto w-full px-4 py-4 space-y-2">
         {tab === 'customers' ? (
-          filtered.length === 0 ? (
-            <EmptyState label="顧客が見つかりません" />
+          displayedCustomers.length === 0 ? (
+            <EmptyState label={showVipOnly ? 'VIP顧客が見つかりません' : '顧客が見つかりません'} />
           ) : (
             <>
-              <p className="text-xs text-slate-400 pb-1 font-medium">{filtered.length}名 を表示</p>
-              {filtered.map(c => (
-                <CustomerCard key={c.key} customer={c} mapping={mapping} onClick={() => onSelectCustomer(c)} />
+              <p className="text-xs text-slate-400 pb-1 font-medium">
+                {displayedCustomers.length}名 を表示
+                {showVipOnly && <span className="ml-2 text-amber-500 font-semibold">（契約総額 降順）</span>}
+              </p>
+              {displayedCustomers.map(c => (
+                <CustomerCard
+                  key={c.key}
+                  customer={c}
+                  mapping={mapping}
+                  onClick={() => onSelectCustomer(c)}
+                  isVip={isVip(c)}
+                  total={customerTotals.get(c.key) ?? 0}
+                />
               ))}
             </>
           )
@@ -327,17 +437,15 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
-function CustomerCard({ customer, mapping, onClick }: { customer: Customer; mapping: ColumnMapping; onClick: () => void }) {
-  const totalAmount = useMemo(() => {
-    if (!mapping.amount) return null;
-    const total = customer.purchases.reduce((sum, p) => {
-      const raw = (p['_totalPrice'] ?? p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
-      const n = parseFloat(raw);
-      return sum + (isNaN(n) ? 0 : n);
-    }, 0);
-    return total > 0 ? total : null;
-  }, [customer.purchases, mapping.amount]);
-
+function CustomerCard({
+  customer, mapping, onClick, isVip, total,
+}: {
+  customer: Customer;
+  mapping: ColumnMapping;
+  onClick: () => void;
+  isVip: boolean;
+  total: number;
+}) {
   const latestDate = useMemo(() => {
     if (!mapping.date) return null;
     const dates = customer.purchases.map(p => p[mapping.date] ?? '').filter(Boolean).sort();
@@ -358,14 +466,36 @@ function CustomerCard({ customer, mapping, onClick }: { customer: Customer; mapp
   return (
     <button
       onClick={onClick}
-      className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-left hover:border-blue-300 hover:shadow-md transition-all group"
+      className={`w-full bg-white border rounded-2xl p-4 text-left hover:shadow-md transition-all group ${
+        isVip
+          ? 'border-amber-200 hover:border-amber-300 ring-1 ring-amber-100'
+          : 'border-slate-200 hover:border-blue-300'
+      }`}
     >
       <div className="flex items-center gap-4">
-        <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-          {initials}
+        <div className="relative shrink-0">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
+            isVip
+              ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-500 group-hover:text-white'
+              : 'bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white'
+          } transition-colors`}>
+            {initials}
+          </div>
+          {isVip && (
+            <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-amber-400 rounded-full flex items-center justify-center shadow-sm">
+              <Crown size={10} className="text-white" />
+            </div>
+          )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-slate-800 truncate">{customer.name || '(名前なし)'}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-slate-800 truncate">{customer.name || '(名前なし)'}</p>
+            {isVip && (
+              <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-2 py-0.5 font-bold shrink-0">
+                VIP
+              </span>
+            )}
+          </div>
           {customer.email && <p className="text-sm text-slate-400 truncate">{customer.email}</p>}
           {contentHolders.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
@@ -381,8 +511,10 @@ function CustomerCard({ customer, mapping, onClick }: { customer: Customer; mapp
           <span className="inline-block bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 py-1 rounded-lg">
             {customer.purchases.length}件
           </span>
-          {totalAmount !== null && (
-            <p className="text-sm font-bold text-green-600">¥{totalAmount.toLocaleString('ja-JP')}</p>
+          {total > 0 && (
+            <p className={`text-sm font-bold ${isVip ? 'text-amber-600' : 'text-green-600'}`}>
+              ¥{total.toLocaleString('ja-JP')}
+            </p>
           )}
           {latestDate && <p className="text-xs text-slate-400">{latestDate}</p>}
         </div>
