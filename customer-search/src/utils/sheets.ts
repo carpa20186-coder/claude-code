@@ -5,6 +5,38 @@ interface SheetResult {
   columns: string[];
 }
 
+interface SheetMeta {
+  properties: {
+    sheetId: number;
+    title: string;
+  };
+}
+
+const PREFERRED_SHEET_NAMES = [
+  '全体（未来教育）',
+  '全体(未来教育)',
+  '全体',
+  '未来教育',
+];
+
+function pickSheet(sheets: SheetMeta[], url: string): SheetMeta | undefined {
+  const gidMatch = url.match(/[#&?]gid=(\d+)/);
+  const gid = gidMatch ? Number.parseInt(gidMatch[1], 10) : null;
+
+  if (gid !== null) {
+    return sheets.find((sheet) => sheet.properties.sheetId === gid) ?? sheets[0];
+  }
+
+  const normalized = (value: string) => value.replace(/\s+/g, '').toLowerCase();
+  const preferred = PREFERRED_SHEET_NAMES
+    .map((name) => normalized(name));
+
+  return sheets.find((sheet) => preferred.includes(normalized(sheet.properties.title)))
+    ?? sheets.find((sheet) => normalized(sheet.properties.title).includes('全体'))
+    ?? sheets.find((sheet) => normalized(sheet.properties.title).includes('未来教育'))
+    ?? sheets[0];
+}
+
 export async function fetchSheetWithToken(url: string, token: string): Promise<SheetResult> {
   const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   if (!match) throw new Error('無効なGoogleスプレッドシートURLです');
@@ -24,11 +56,8 @@ export async function fetchSheetWithToken(url: string, token: string): Promise<S
   }
 
   const meta = await metaResp.json();
-  const sheets: { properties: { sheetId: number; title: string } }[] = meta.sheets ?? [];
-
-  const gidMatch = url.match(/[#&?]gid=(\d+)/);
-  const gid = gidMatch ? parseInt(gidMatch[1]) : 0;
-  const sheet = sheets.find(s => s.properties.sheetId === gid) ?? sheets[0];
+  const sheets: SheetMeta[] = meta.sheets ?? [];
+  const sheet = pickSheet(sheets, url);
   if (!sheet) throw new Error('シートが見つかりません');
 
   const sheetName = sheet.properties.title;

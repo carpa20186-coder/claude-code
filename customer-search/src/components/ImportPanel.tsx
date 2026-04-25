@@ -154,7 +154,7 @@ export function ImportPanel({
                     </button>
                   </div>
                   <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
-                    ログイン済みアカウントでアクセス可能なシートを直接読み込みます。読み込み後は5分ごとに自動更新されます。
+                    ログイン済みアカウントでアクセス可能なシートを直接読み込みます。gid未指定なら「全体（未来教育）」を優先し、読み込み後は5分ごとに自動更新されます。
                   </p>
                 </div>
               )}
