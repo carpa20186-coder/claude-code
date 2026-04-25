@@ -24,13 +24,40 @@ export function ImportPanel({
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function handleFile(file: File) {
+  async function handleFiles(files: FileList | File[]) {
     setError('');
     setLoading(true);
     try {
-      const text = await file.text();
-      const result = await parseCSVText(text);
-      onImport(result.records, result.columns);
+      const fileList = Array.from(files).filter((file) => file.name.toLowerCase().endsWith('.csv'));
+      if (fileList.length === 0) {
+        throw new Error('CSVファイルを選択してください。');
+      }
+
+      const parsedResults = await Promise.all(
+        fileList.map(async (file) => {
+          const text = await file.text();
+          return parseCSVText(text);
+        })
+      );
+
+      const columnOrder: string[] = [];
+      parsedResults.forEach((result) => {
+        result.columns.forEach((column) => {
+          if (!columnOrder.includes(column)) columnOrder.push(column);
+        });
+      });
+
+      const mergedRecords = parsedResults.flatMap((result) =>
+        result.records.map((record) => {
+          const merged: PurchaseRecord = {};
+          columnOrder.forEach((column) => {
+            merged[column] = record[column] ?? '';
+          });
+          return merged;
+        })
+      );
+
+      onImport(mergedRecords, columnOrder);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -60,8 +87,9 @@ export function ImportPanel({
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    if (e.dataTransfer.files.length > 0) {
+      handleFiles(e.dataTransfer.files);
+    }
   }
 
   const isLoading = loading || googleLoading;
@@ -173,13 +201,14 @@ export function ImportPanel({
                 <Upload className="text-blue-500" size={24} />
               </div>
               <p className="font-semibold text-slate-700 mb-1">CSVファイルをアップロード</p>
-              <p className="text-slate-400 text-sm">ドラッグ＆ドロップ またはクリックして選択</p>
+              <p className="text-slate-400 text-sm">複数選択できます。ドラッグ＆ドロップ またはクリックして選択</p>
               <input
                 ref={fileRef}
                 type="file"
                 accept=".csv,text/csv"
+                multiple
                 className="hidden"
-                onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+                onChange={e => e.target.files && e.target.files.length > 0 && handleFiles(e.target.files)}
               />
             </div>
 
