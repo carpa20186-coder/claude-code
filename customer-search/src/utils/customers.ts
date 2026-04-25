@@ -8,6 +8,14 @@ export interface Project {
   customers: Customer[];
 }
 
+export interface Holder {
+  name: string;
+  purchaseCount: number;
+  customerCount: number;
+  totalAmount: number | null;
+  customers: Customer[];
+}
+
 export function buildCustomers(records: PurchaseRecord[], mapping: ColumnMapping): Customer[] {
   const map = new Map<string, Customer>();
 
@@ -68,6 +76,36 @@ export function buildProjects(customers: Customer[], mapping: ColumnMapping): Pr
       };
     })
     .sort((a, b) => b.purchaseCount - a.purchaseCount);
+}
+
+export function buildHolders(customers: Customer[], amountCol: string): Holder[] {
+  const map = new Map<string, { customerKeys: Set<string>; purchases: PurchaseRecord[] }>();
+
+  for (const c of customers) {
+    for (const p of c.purchases) {
+      const name = (p['_contentHolder'] ?? '').trim();
+      if (!name) continue;
+      if (!map.has(name)) map.set(name, { customerKeys: new Set(), purchases: [] });
+      map.get(name)!.customerKeys.add(c.key);
+      map.get(name)!.purchases.push(p);
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([name, data]) => {
+      const holderCustomers = customers.filter(c => data.customerKeys.has(c.key));
+      let totalAmount: number | null = null;
+      if (amountCol) {
+        const sum = data.purchases.reduce((acc, p) => {
+          const raw = (p['_totalPrice'] ?? p[amountCol] ?? '').replace(/[¥,￥\s]/g, '');
+          const n = parseFloat(raw);
+          return acc + (isNaN(n) ? 0 : n);
+        }, 0);
+        if (sum > 0) totalAmount = sum;
+      }
+      return { name, purchaseCount: data.purchases.length, customerCount: data.customerKeys.size, totalAmount, customers: holderCustomers };
+    })
+    .sort((a, b) => (b.totalAmount ?? 0) - (a.totalAmount ?? 0));
 }
 
 export function getUniqueValues(records: PurchaseRecord[], column: string): string[] {

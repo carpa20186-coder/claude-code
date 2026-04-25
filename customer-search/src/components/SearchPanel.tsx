@@ -2,14 +2,14 @@ import { useState, useMemo, useCallback } from 'react';
 import {
   Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
   ChevronDown, ChevronUp, BarChart3, TrendingUp, Package,
-  RefreshCw, Clock, Settings2, Columns3, Crown,
+  RefreshCw, Clock, Settings2, Columns3, Crown, Tag,
 } from 'lucide-react';
-import { filterCustomers, getUniqueValues, buildProjects } from '../utils/customers';
+import { filterCustomers, getUniqueValues, buildProjects, buildHolders } from '../utils/customers';
 import { RulesPanel } from './RulesPanel';
 import type { Customer, ColumnMapping, PurchaseRecord, SyncConfig, GoogleUser, ClassificationRule } from '../types';
-import type { Project } from '../utils/customers';
+import type { Project, Holder } from '../utils/customers';
 
-type Tab = 'customers' | 'projects';
+type Tab = 'customers' | 'projects' | 'holders';
 
 interface Props {
   customers: Customer[];
@@ -82,6 +82,7 @@ export function SearchPanel({
     [records, mapping.project]
   );
   const projectData = useMemo(() => buildProjects(customers, mapping), [customers, mapping]);
+  const holderData = useMemo(() => buildHolders(customers, mapping.amount), [customers, mapping.amount]);
 
   const filtered = useMemo(
     () => filterCustomers(customers, query, mapping, { contentHolder, project, dateFrom, dateTo }),
@@ -104,6 +105,15 @@ export function SearchPanel({
       p.customers.some(c => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
     );
   }, [projectData, query]);
+
+  const filteredHolders = useMemo(() => {
+    if (!query.trim()) return holderData;
+    const q = query.toLowerCase();
+    return holderData.filter(h =>
+      h.name.toLowerCase().includes(q) ||
+      h.customers.some(c => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
+    );
+  }, [holderData, query]);
 
   const activeFilterCount = [contentHolder, project, dateFrom, dateTo].filter(Boolean).length;
   const totalAmount = useMemo(() => {
@@ -220,7 +230,7 @@ export function SearchPanel({
 
           {/* Tabs */}
           <div className="flex gap-1">
-            {([['customers', '顧客別', Users], ['projects', '案件別', Package]] as const).map(([key, label, Icon]) => (
+            {([['customers', '顧客別', Users], ['projects', '商品別', Package], ['holders', 'ホルダー別', Tag]] as const).map(([key, label, Icon]) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
@@ -247,7 +257,7 @@ export function SearchPanel({
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder={tab === 'customers' ? '名前・メールアドレス・案件名で検索...' : '案件名・顧客名で検索...'}
+              placeholder={tab === 'customers' ? '名前・メールアドレス・商品名で検索...' : tab === 'projects' ? '商品名・顧客名で検索...' : 'ホルダー名・顧客名で検索...'}
               className="w-full pl-9 pr-9 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
             />
             {query && (
@@ -409,14 +419,25 @@ export function SearchPanel({
               ))}
             </>
           )
-        ) : (
+        ) : tab === 'projects' ? (
           filteredProjects.length === 0 ? (
-            <EmptyState label="案件が見つかりません" />
+            <EmptyState label="商品が見つかりません" />
           ) : (
             <>
-              <p className="text-xs text-slate-400 pb-1 font-medium">{filteredProjects.length}件の案件</p>
+              <p className="text-xs text-slate-400 pb-1 font-medium">{filteredProjects.length}件の商品</p>
               {filteredProjects.map(p => (
                 <ProjectCard key={p.name} project={p} onSelectCustomer={onSelectCustomer} mapping={mapping} />
+              ))}
+            </>
+          )
+        ) : (
+          filteredHolders.length === 0 ? (
+            <EmptyState label="コンテンツホルダーが見つかりません" />
+          ) : (
+            <>
+              <p className="text-xs text-slate-400 pb-1 font-medium">{filteredHolders.length}名のホルダー</p>
+              {filteredHolders.map(h => (
+                <HolderCard key={h.name} holder={h} onSelectCustomer={onSelectCustomer} mapping={mapping} />
               ))}
             </>
           )
@@ -520,6 +541,65 @@ function CustomerCard({
         </div>
       </div>
     </button>
+  );
+}
+
+function HolderCard({ holder, onSelectCustomer, mapping }: { holder: Holder; onSelectCustomer: (c: Customer) => void; mapping: ColumnMapping }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-violet-200 transition-colors">
+      <button onClick={() => setExpanded(v => !v)} className="w-full p-4 text-left">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-violet-700 rounded-xl flex items-center justify-center shrink-0">
+            <Tag size={18} className="text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-slate-800">{holder.name}</p>
+            <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+              <span className="flex items-center gap-1"><Users size={11} />{holder.customerCount}名</span>
+              <span className="flex items-center gap-1"><ShoppingBag size={11} />{holder.purchaseCount}件</span>
+              {holder.totalAmount !== null && (
+                <span className="text-green-600 font-semibold">¥{holder.totalAmount.toLocaleString('ja-JP')}</span>
+              )}
+            </div>
+          </div>
+          <ChevronDown size={16} className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-slate-100 bg-slate-50 divide-y divide-slate-100">
+          {holder.customers.map(c => {
+            const purchases = c.purchases.filter(p => (p['_contentHolder'] ?? '').trim() === holder.name);
+            const amt = purchases.reduce((sum, p) => {
+              const raw = (p['_totalPrice'] ?? (mapping.amount ? p[mapping.amount] : '') ?? '').replace(/[¥,￥\s]/g, '');
+              const n = parseFloat(raw);
+              return sum + (isNaN(n) ? 0 : n);
+            }, 0);
+            return (
+              <button
+                key={c.key}
+                onClick={() => onSelectCustomer(c)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-violet-50 transition-colors"
+              >
+                <div className="w-8 h-8 bg-violet-100 text-violet-700 rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
+                  {(c.name || c.email || '?').slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-700 truncate">{c.name || '(名前なし)'}</p>
+                  {c.email && <p className="text-xs text-slate-400 truncate">{c.email}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-semibold text-slate-600">{purchases.length}件</p>
+                  {amt > 0 && <p className="text-xs text-green-600">¥{amt.toLocaleString('ja-JP')}</p>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
