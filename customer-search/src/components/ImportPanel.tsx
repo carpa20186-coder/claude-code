@@ -71,10 +71,10 @@ export function ImportPanel({
       <header className="bg-white border-b border-blue-100 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-[#0f1729] rounded-lg flex items-center justify-center">
               <BarChart3 size={18} className="text-white" />
             </div>
-            <span className="text-lg font-bold text-slate-800">CustomerInsight</span>
+            <span className="text-lg font-bold text-slate-800">IPS Search</span>
           </div>
           {googleUser && (
             <div className="flex items-center gap-3">

@@ -37,4 +37,4 @@ export interface SyncConfig {
   lastSync: Date | null;
 }
 
-export type ViewMode = 'import' | 'mapping' | 'search' | 'detail';
+export type ViewMode = 'landing' | 'import' | 'mapping' | 'search' | 'detail';

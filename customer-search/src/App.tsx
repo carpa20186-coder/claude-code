@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { LandingPage } from './components/LandingPage';
 import { ImportPanel } from './components/ImportPanel';
 import { MappingPanel } from './components/MappingPanel';
 import { SearchPanel } from './components/SearchPanel';
@@ -13,7 +14,7 @@ import type { PurchaseRecord, Customer, ColumnMapping, ViewMode, SyncConfig, Cla
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 
 export default function App() {
-  const [view, setView] = useState<ViewMode>('import');
+  const [view, setView] = useState<ViewMode>('landing');
   const [rawRecords, setRawRecords] = useState<PurchaseRecord[]>([]);
   const [records, setRecords] = useState<PurchaseRecord[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
@@ -53,7 +54,10 @@ export default function App() {
     setMapping(detected);
     applyRecords(recs, cols, detected);
     setSyncConfig(sheetUrl ? { sheetUrl, intervalMin: 5, lastSync: new Date() } : null);
-    setView('mapping');
+
+    // Auto-skip mapping panel when all key fields are detected
+    const confident = !!(detected.name || detected.email) && !!detected.project && !!detected.amount;
+    setView(confident ? 'search' : 'mapping');
   }, [applyRecords]);
 
   const handleMappingConfirm = useCallback(() => {
@@ -92,6 +96,10 @@ export default function App() {
     return () => clearInterval(id);
   }, [syncConfig, token, view, doSync]);
 
+  if (view === 'landing') {
+    return <LandingPage onStart={() => setView('import')} />;
+  }
+
   if (view === 'import') {
     return (
       <ImportPanel
@@ -128,6 +136,7 @@ export default function App() {
         mapping={mapping}
         onSelectCustomer={c => { setSelectedCustomer(c); setView('detail'); }}
         onReimport={() => setView('import')}
+        onConfigureMapping={() => setView('mapping')}
         syncConfig={syncConfig}
         syncing={syncing}
         onManualSync={doSync}

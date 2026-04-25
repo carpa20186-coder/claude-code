@@ -1,12 +1,12 @@
 import Papa from 'papaparse';
 import type { PurchaseRecord, ColumnMapping } from '../types';
 
-const NAME_CANDIDATES = ['名前', '氏名', '顧客名', '顧客氏名', 'name', 'customer_name', 'full_name'];
-const EMAIL_CANDIDATES = ['メール', 'メールアドレス', 'email', 'mail', 'e-mail', 'email_address'];
+const NAME_CANDIDATES = ['user', '名前', '氏名', '顧客名', '顧客氏名', 'name', 'customer_name', 'full_name', 'username'];
+const EMAIL_CANDIDATES = ['user_email', 'メール', 'メールアドレス', 'email', 'mail', 'e-mail', 'email_address'];
 const CONTENT_HOLDER_CANDIDATES = ['コンテンツホルダー', 'コンテンツ', 'content_holder', 'holder', 'publisher'];
-const PROJECT_CANDIDATES = ['案件', '案件名', 'プロジェクト', 'project', 'item', '商品名', '商品'];
-const DATE_CANDIDATES = ['日付', '購入日', '購入日時', 'date', 'purchase_date', 'created_at'];
-const AMOUNT_CANDIDATES = ['金額', '価格', '購入金額', 'amount', 'price', 'total'];
+const PROJECT_CANDIDATES = ['product_name', 'course_name', '案件', '案件名', 'プロジェクト', 'project', 'item', '商品名', '商品'];
+const DATE_CANDIDATES = ['日付', '購入日', '購入日時', 'date', 'purchase_date', 'created_at', 'ordered_at'];
+const AMOUNT_CANDIDATES = ['final_price', '金額', '価格', '購入金額', 'amount', 'price', 'total'];
 
 function findColumn(headers: string[], candidates: string[]): string {
   const lower = headers.map(h => h.toLowerCase().trim());

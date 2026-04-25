@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
   ChevronDown, ChevronUp, BarChart3, TrendingUp, Package,
-  RefreshCw, Clock, Settings2,
+  RefreshCw, Clock, Settings2, Columns3,
 } from 'lucide-react';
 import { filterCustomers, getUniqueValues, buildProjects } from '../utils/customers';
 import { RulesPanel } from './RulesPanel';
@@ -18,6 +18,7 @@ interface Props {
   mapping: ColumnMapping;
   onSelectCustomer: (c: Customer) => void;
   onReimport: () => void;
+  onConfigureMapping: () => void;
   syncConfig: SyncConfig | null;
   syncing: boolean;
   onManualSync: () => void;
@@ -34,7 +35,7 @@ function getAmount(rec: PurchaseRecord, amountCol: string): number {
 }
 
 export function SearchPanel({
-  customers, records, mapping, onSelectCustomer, onReimport,
+  customers, records, mapping, onSelectCustomer, onReimport, onConfigureMapping,
   syncConfig, syncing, onManualSync, googleUser, onSyncIntervalChange,
   rules, onRulesChange,
 }: Props) {
@@ -98,10 +99,10 @@ export function SearchPanel({
         <div className="max-w-5xl mx-auto px-4">
           <div className="flex items-center justify-between py-3.5">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-[#0f1729] rounded-lg flex items-center justify-center">
                 <BarChart3 size={16} className="text-white" />
               </div>
-              <span className="text-base font-bold text-slate-800">CustomerInsight</span>
+              <span className="text-base font-bold text-slate-800">IPS Search</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="hidden sm:flex items-center gap-4 text-sm text-slate-500">
@@ -156,14 +157,22 @@ export function SearchPanel({
                   title="分類ルール設定"
                 >
                   <Settings2 size={13} />
-                  <span className="hidden sm:inline">ルール設定</span>
+                  <span className="hidden sm:inline">ルール</span>
+                </button>
+                <button
+                  onClick={onConfigureMapping}
+                  className="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg px-3 py-1.5 transition-colors"
+                  title="列の設定"
+                >
+                  <Columns3 size={13} />
+                  <span className="hidden sm:inline">列設定</span>
                 </button>
                 <button
                   onClick={onReimport}
                   className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 rounded-lg px-3 py-1.5 transition-colors"
                 >
                   <Upload size={13} />
-                  再インポート
+                  インポート
                 </button>
               </div>
             </div>
