@@ -18,6 +18,13 @@ export interface ColumnMapping {
   amount: string;
 }
 
+export interface ClassificationRule {
+  id: string;
+  keyword: string;
+  contentHolder: string;
+  priority: number;
+}
+
 export interface GoogleUser {
   name: string;
   email: string;

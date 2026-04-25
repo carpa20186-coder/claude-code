@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ArrowLeft, Mail, ShoppingBag, TrendingUp, Calendar, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Mail, ShoppingBag, TrendingUp, Calendar, BarChart3, Layers } from 'lucide-react';
 import type { Customer, ColumnMapping } from '../types';
 
 interface Props {
@@ -13,7 +13,7 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
   const totalAmount = useMemo(() => {
     if (!mapping.amount) return null;
     const total = customer.purchases.reduce((sum, p) => {
-      const raw = (p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
+      const raw = (p['_totalPrice'] ?? p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
       const n = parseFloat(raw);
       return sum + (isNaN(n) ? 0 : n);
     }, 0);
@@ -28,11 +28,24 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
   }, [customer.purchases, mapping.date]);
 
   const displayColumns = useMemo(() => {
-    const keyFields = [mapping.name, mapping.email, mapping.date, mapping.amount].filter(Boolean);
-    return columns.filter(c => !keyFields.includes(c));
+    const skip = new Set([
+      mapping.name, mapping.email, mapping.date, mapping.amount,
+      mapping.project, mapping.contentHolder,
+      '_contentHolder', '_normalizedName', '_installments', '_totalPrice', '_isContinuation', '_skip',
+    ]);
+    return columns.filter(c => c && !skip.has(c));
   }, [columns, mapping]);
 
   const initials = (customer.name || customer.email || '?').slice(0, 2).toUpperCase();
+
+  const contentHolders = useMemo(() => {
+    const s = new Set(
+      customer.purchases
+        .map(p => (p['_contentHolder'] ?? '').trim())
+        .filter(Boolean)
+    );
+    return Array.from(s);
+  }, [customer.purchases]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -62,6 +75,15 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
                   {customer.email}
                 </p>
               )}
+              {contentHolders.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {contentHolders.map(ch => (
+                    <span key={ch} className="text-xs bg-blue-50 text-blue-600 border border-blue-100 rounded-full px-2 py-0.5 font-medium">
+                      {ch}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="hidden sm:flex items-center gap-4 shrink-0">
               <div className="text-center">
@@ -69,7 +91,7 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
                   <ShoppingBag size={16} />
                   {customer.purchases.length}
                 </div>
-                <p className="text-xs text-slate-400">購入件数</p>
+                <p className="text-xs text-slate-400">新規契約</p>
               </div>
               {totalAmount !== null && (
                 <div className="text-center">
@@ -77,7 +99,7 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
                     <TrendingUp size={16} />
                     ¥{totalAmount.toLocaleString('ja-JP')}
                   </div>
-                  <p className="text-xs text-slate-400">合計金額</p>
+                  <p className="text-xs text-slate-400">契約総額</p>
                 </div>
               )}
             </div>
@@ -86,43 +108,72 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
       </header>
 
       <main className="max-w-5xl mx-auto w-full px-4 py-5 space-y-3">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">購入履歴</h3>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">購入履歴（新規契約のみ）</h3>
 
-        {sortedPurchases.map((p, i) => (
-          <div key={i} className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-blue-200 transition-colors">
-            <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                {mapping.date && p[mapping.date] && (
-                  <>
-                    <Calendar size={13} className="text-blue-400" />
-                    <span className="font-medium text-slate-600">{p[mapping.date]}</span>
-                  </>
-                )}
-                {mapping.project && p[mapping.project] && (
-                  <span className="bg-blue-50 text-blue-700 border border-blue-100 text-xs font-medium px-2 py-0.5 rounded-full">
-                    {p[mapping.project]}
-                  </span>
-                )}
+        {sortedPurchases.map((p, i) => {
+          const installments = parseInt(p['_installments'] ?? '1') || 1;
+          const paymentAmount = mapping.amount ? (p[mapping.amount] ?? '') : '';
+          const totalPrice = p['_totalPrice'];
+          const normalizedName = p['_normalizedName'];
+          const contentHolder = p['_contentHolder'];
+          const rawProductName = mapping.project ? p[mapping.project] : '';
+
+          return (
+            <div key={i} className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-blue-200 transition-colors">
+              <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
+                <div className="flex items-center gap-2 text-sm text-slate-500 flex-wrap">
+                  {mapping.date && p[mapping.date] && (
+                    <>
+                      <Calendar size={13} className="text-blue-400" />
+                      <span className="font-medium text-slate-600">{p[mapping.date]}</span>
+                    </>
+                  )}
+                  {contentHolder && (
+                    <span className="bg-blue-50 text-blue-700 border border-blue-100 text-xs font-medium px-2 py-0.5 rounded-full">
+                      {contentHolder}
+                    </span>
+                  )}
+                  {normalizedName && (
+                    <span className="text-slate-700 font-medium text-xs">{normalizedName}</span>
+                  )}
+                  {!normalizedName && rawProductName && (
+                    <span className="text-slate-700 font-medium text-xs">{rawProductName}</span>
+                  )}
+                </div>
+                <div className="text-right shrink-0 ml-2">
+                  {totalPrice && parseFloat(totalPrice) > 0 ? (
+                    <div>
+                      <span className="font-bold text-green-600">
+                        ¥{parseFloat(totalPrice).toLocaleString('ja-JP')}
+                      </span>
+                      {installments > 1 && (
+                        <p className="text-xs text-slate-400 flex items-center justify-end gap-1 mt-0.5">
+                          <Layers size={11} />
+                          ¥{Number(paymentAmount.replace(/[¥,￥\s]/g, '')).toLocaleString('ja-JP')} × {installments}回
+                        </p>
+                      )}
+                    </div>
+                  ) : paymentAmount ? (
+                    <span className="font-bold text-green-600">
+                      {paymentAmount.match(/[¥￥]/) ? paymentAmount : `¥${Number(paymentAmount.replace(/[,\s]/g, '')).toLocaleString('ja-JP')}`}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              {mapping.amount && p[mapping.amount] && (
-                <span className="font-bold text-green-600">
-                  {p[mapping.amount].match(/[¥￥]/) ? p[mapping.amount] : `¥${Number(p[mapping.amount].replace(/[,\s]/g, '')).toLocaleString('ja-JP')}`}
-                </span>
+
+              {displayColumns.filter(c => p[c]?.trim()).length > 0 && (
+                <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                  {displayColumns.filter(c => p[c]?.trim()).map(col => (
+                    <div key={col}>
+                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">{col}</p>
+                      <p className="text-sm text-slate-700 font-medium break-words">{p[col]}</p>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-
-            {displayColumns.filter(c => p[c]?.trim()).length > 0 && (
-              <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-                {displayColumns.filter(c => p[c]?.trim()).map(col => (
-                  <div key={col}>
-                    <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">{col}</p>
-                    <p className="text-sm text-slate-700 font-medium break-words">{p[col]}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </main>
     </div>
   );

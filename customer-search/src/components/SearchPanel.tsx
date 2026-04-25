@@ -2,10 +2,11 @@ import { useState, useMemo } from 'react';
 import {
   Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
   ChevronDown, ChevronUp, BarChart3, TrendingUp, Package,
-  RefreshCw, Clock,
+  RefreshCw, Clock, Settings2,
 } from 'lucide-react';
 import { filterCustomers, getUniqueValues, buildProjects } from '../utils/customers';
-import type { Customer, ColumnMapping, PurchaseRecord, SyncConfig, GoogleUser } from '../types';
+import { RulesPanel } from './RulesPanel';
+import type { Customer, ColumnMapping, PurchaseRecord, SyncConfig, GoogleUser, ClassificationRule } from '../types';
 import type { Project } from '../utils/customers';
 
 type Tab = 'customers' | 'projects';
@@ -22,24 +23,37 @@ interface Props {
   onManualSync: () => void;
   googleUser: GoogleUser | null;
   onSyncIntervalChange: (min: number) => void;
+  rules: ClassificationRule[];
+  onRulesChange: (rules: ClassificationRule[]) => void;
+}
+
+function getAmount(rec: PurchaseRecord, amountCol: string): number {
+  const raw = (rec['_totalPrice'] ?? rec[amountCol] ?? '').replace(/[¥,￥\s]/g, '');
+  const n = parseFloat(raw);
+  return isNaN(n) ? 0 : n;
 }
 
 export function SearchPanel({
   customers, records, mapping, onSelectCustomer, onReimport,
   syncConfig, syncing, onManualSync, googleUser, onSyncIntervalChange,
+  rules, onRulesChange,
 }: Props) {
   const [tab, setTab] = useState<Tab>('customers');
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [contentHolder, setContentHolder] = useState('');
   const [project, setProject] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  const contentHolders = useMemo(
-    () => mapping.contentHolder ? getUniqueValues(records, mapping.contentHolder) : [],
-    [records, mapping.contentHolder]
-  );
+  const contentHolders = useMemo(() => {
+    if (records.some(r => r['_contentHolder'] !== undefined)) {
+      return getUniqueValues(records, '_contentHolder');
+    }
+    return mapping.contentHolder ? getUniqueValues(records, mapping.contentHolder) : [];
+  }, [records, mapping.contentHolder]);
+
   const projects = useMemo(
     () => mapping.project ? getUniqueValues(records, mapping.project) : [],
     [records, mapping.project]
@@ -66,11 +80,7 @@ export function SearchPanel({
   const activeFilterCount = [contentHolder, project, dateFrom, dateTo].filter(Boolean).length;
   const totalAmount = useMemo(() => {
     if (!mapping.amount) return null;
-    return records.reduce((sum, r) => {
-      const raw = (r[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
-      const n = parseFloat(raw);
-      return sum + (isNaN(n) ? 0 : n);
-    }, 0);
+    return records.reduce((sum, r) => sum + getAmount(r, mapping.amount), 0);
   }, [records, mapping.amount]);
 
   function clearFilters() {
@@ -79,6 +89,10 @@ export function SearchPanel({
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
+      {showRules && (
+        <RulesPanel rules={rules} onChange={onRulesChange} onClose={() => setShowRules(false)} />
+      )}
+
       {/* Top header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
         <div className="max-w-5xl mx-auto px-4">
@@ -132,10 +146,18 @@ export function SearchPanel({
                   <button onClick={onReimport} className="flex items-center gap-1.5">
                     {googleUser.picture
                       ? <img src={googleUser.picture} alt="" className="w-7 h-7 rounded-full" />
-                      : <div className="w-7 h-7 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">{googleUser.name.slice(0,1)}</div>
+                      : <div className="w-7 h-7 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">{googleUser.name.slice(0, 1)}</div>
                     }
                   </button>
                 )}
+                <button
+                  onClick={() => setShowRules(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-lg px-3 py-1.5 transition-colors"
+                  title="分類ルール設定"
+                >
+                  <Settings2 size={13} />
+                  <span className="hidden sm:inline">ルール設定</span>
+                </button>
                 <button
                   onClick={onReimport}
                   className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 rounded-lg px-3 py-1.5 transition-colors"
@@ -300,7 +322,7 @@ function CustomerCard({ customer, mapping, onClick }: { customer: Customer; mapp
   const totalAmount = useMemo(() => {
     if (!mapping.amount) return null;
     const total = customer.purchases.reduce((sum, p) => {
-      const raw = (p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
+      const raw = (p['_totalPrice'] ?? p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
       const n = parseFloat(raw);
       return sum + (isNaN(n) ? 0 : n);
     }, 0);
@@ -314,8 +336,11 @@ function CustomerCard({ customer, mapping, onClick }: { customer: Customer; mapp
   }, [customer.purchases, mapping.date]);
 
   const contentHolders = useMemo(() => {
-    if (!mapping.contentHolder) return [];
-    const s = new Set(customer.purchases.map(p => (p[mapping.contentHolder] ?? '').trim()).filter(Boolean));
+    const s = new Set(
+      customer.purchases
+        .map(p => (p['_contentHolder'] ?? (mapping.contentHolder ? p[mapping.contentHolder] : '') ?? '').trim())
+        .filter(Boolean)
+    );
     return Array.from(s);
   }, [customer.purchases, mapping.contentHolder]);
 
@@ -389,7 +414,7 @@ function ProjectCard({ project, onSelectCustomer, mapping }: { project: Project;
           {project.customers.map(c => {
             const purchases = c.purchases.filter(p => (p[mapping.project] ?? '').trim() === project.name);
             const amt = mapping.amount ? purchases.reduce((sum, p) => {
-              const raw = (p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
+              const raw = (p['_totalPrice'] ?? p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
               const n = parseFloat(raw);
               return sum + (isNaN(n) ? 0 : n);
             }, 0) : 0;

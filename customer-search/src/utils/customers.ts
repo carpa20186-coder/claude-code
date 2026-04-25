@@ -53,7 +53,7 @@ export function buildProjects(customers: Customer[], mapping: ColumnMapping): Pr
       let totalAmount: number | null = null;
       if (mapping.amount) {
         const sum = data.purchases.reduce((acc, p) => {
-          const raw = (p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
+          const raw = (p['_totalPrice'] ?? p[mapping.amount] ?? '').replace(/[¥,￥\s]/g, '');
           const n = parseFloat(raw);
           return acc + (isNaN(n) ? 0 : n);
         }, 0);
@@ -92,9 +92,12 @@ export function filterCustomers(
       let purchases = c.purchases;
 
       if (filters.contentHolder) {
-        purchases = purchases.filter(p =>
-          (p[mapping.contentHolder] ?? '').trim() === filters.contentHolder
-        );
+        purchases = purchases.filter(p => {
+          const ch = (p['_contentHolder'] !== undefined
+            ? p['_contentHolder']
+            : (mapping.contentHolder ? p[mapping.contentHolder] : '') ?? '').trim();
+          return ch === filters.contentHolder;
+        });
       }
       if (filters.project) {
         purchases = purchases.filter(p =>
