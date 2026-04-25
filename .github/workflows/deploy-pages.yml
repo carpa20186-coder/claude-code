@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - claude/customer-purchase-search-IDjP8
+      - claude/claude-code-usage-01YS33uX6EQqXRxwtU99Qx1e
       - main
   workflow_dispatch:
 
