@@ -161,8 +161,39 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
                 </div>
               </div>
 
-              {displayColumns.filter(c => p[c]?.trim()).length > 0 && (
+              {(mapping.amount || displayColumns.filter(c => p[c]?.trim()).length > 0) && (
                 <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                  {/* 契約金額 – always first */}
+                  {mapping.amount && (
+                    <div className="col-span-2 sm:col-span-1 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
+                      <p className="text-xs font-semibold text-green-500 uppercase tracking-wide mb-1">契約金額</p>
+                      <p className="text-xl font-bold text-green-700">
+                        ¥{(parseFloat((p['_totalPrice'] ?? '0').replace(/[¥,￥\s]/g, '')) || parseFloat((p[mapping.amount] ?? '0').replace(/[¥,￥\s]/g, '')) || 0).toLocaleString('ja-JP')}
+                      </p>
+                      {installments > 1 && (
+                        <p className="text-xs text-green-500 mt-0.5 flex items-center gap-1">
+                          <Layers size={10} />
+                          ¥{Number(paymentAmount.replace(/[¥,￥\s]/g, '')).toLocaleString('ja-JP')} × {installments}回分割
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {/* 決済金額（分割時のみ） */}
+                  {installments > 1 && paymentAmount && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">決済金額（初回）</p>
+                      <p className="text-sm text-slate-700 font-medium">
+                        ¥{Number(paymentAmount.replace(/[¥,￥\s]/g, '')).toLocaleString('ja-JP')}
+                      </p>
+                    </div>
+                  )}
+                  {installments > 1 && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">分割回数</p>
+                      <p className="text-sm text-slate-700 font-medium">{installments}回</p>
+                    </div>
+                  )}
+                  {/* Other columns */}
                   {displayColumns.filter(c => p[c]?.trim()).map(col => (
                     <div key={col}>
                       <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">{col}</p>
