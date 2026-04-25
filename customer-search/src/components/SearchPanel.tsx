@@ -781,7 +781,9 @@ function CrossSellCard({ pairs }: { pairs: ReturnType<typeof buildCrossSellPairs
         <Tag size={16} className="text-violet-500" />
         <h3 className="font-semibold text-slate-800">クロスセル分析</h3>
       </div>
-      <p className="text-sm text-slate-400 mb-4">ホルダーAの購入者が、別ホルダーも買っている割合です。</p>
+      <p className="text-sm text-slate-400 mb-4">
+        左側を基準にした併売率です。A→B は「A購入者のうち B も買った割合」で、B→A は別指標です。
+      </p>
 
       {pairs.length === 0 ? (
         <p className="text-sm text-slate-400">複数ホルダーを横断した購入データが増えると表示されます。</p>
@@ -790,13 +792,16 @@ function CrossSellCard({ pairs }: { pairs: ReturnType<typeof buildCrossSellPairs
           {pairs.map((pair) => (
             <div key={`${pair.baseHolder}-${pair.targetHolder}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
               <div className="flex items-center justify-between gap-3 text-sm">
-                <p className="font-semibold text-slate-700">{pair.baseHolder} → {pair.targetHolder}</p>
+                <div>
+                  <p className="font-semibold text-slate-700">{pair.baseHolder} 購入者 → {pair.targetHolder} も購入</p>
+                  <p className="mt-1 text-xs text-slate-500">逆向きは別集計: {pair.targetHolder} 購入者 → {pair.baseHolder} も購入</p>
+                </div>
                 <p className="font-bold text-violet-600">{Math.round(pair.rate * 100)}%</p>
               </div>
               <div className="mt-2 h-2.5 rounded-full bg-slate-200 overflow-hidden">
                 <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.max(pair.rate * 100, 4)}%` }} />
               </div>
-              <p className="mt-2 text-xs text-slate-500">{pair.customerCount} / {pair.totalBaseCustomers}名が両方購入</p>
+              <p className="mt-2 text-xs text-slate-500">{pair.baseHolder} 購入者 {pair.totalBaseCustomers}名中、{pair.customerCount}名が {pair.targetHolder} も購入</p>
             </div>
           ))}
         </div>
