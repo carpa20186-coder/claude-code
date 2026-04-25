@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import {
   Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
-  ChevronDown, ChevronUp, BarChart3, TrendingUp, Package
+  ChevronDown, ChevronUp, BarChart3, TrendingUp, Package,
+  RefreshCw, Clock,
 } from 'lucide-react';
 import { filterCustomers, getUniqueValues, buildProjects } from '../utils/customers';
-import type { Customer, ColumnMapping, PurchaseRecord } from '../types';
+import type { Customer, ColumnMapping, PurchaseRecord, SyncConfig, GoogleUser } from '../types';
 import type { Project } from '../utils/customers';
 
 type Tab = 'customers' | 'projects';
@@ -16,9 +17,17 @@ interface Props {
   mapping: ColumnMapping;
   onSelectCustomer: (c: Customer) => void;
   onReimport: () => void;
+  syncConfig: SyncConfig | null;
+  syncing: boolean;
+  onManualSync: () => void;
+  googleUser: GoogleUser | null;
+  onSyncIntervalChange: (min: number) => void;
 }
 
-export function SearchPanel({ customers, records, mapping, onSelectCustomer, onReimport }: Props) {
+export function SearchPanel({
+  customers, records, mapping, onSelectCustomer, onReimport,
+  syncConfig, syncing, onManualSync, googleUser, onSyncIntervalChange,
+}: Props) {
   const [tab, setTab] = useState<Tab>('customers');
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -97,13 +106,44 @@ export function SearchPanel({ customers, records, mapping, onSelectCustomer, onR
                   </span>
                 )}
               </div>
-              <button
-                onClick={onReimport}
-                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 rounded-lg px-3 py-1.5 transition-colors"
-              >
-                <Upload size={13} />
-                再インポート
-              </button>
+              <div className="flex items-center gap-2">
+                {syncConfig && (
+                  <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+                    <Clock size={12} className="text-blue-400" />
+                    {syncConfig.lastSync
+                      ? `${Math.floor((Date.now() - syncConfig.lastSync.getTime()) / 60000)}分前に更新`
+                      : '同期中...'}
+                    <select
+                      value={syncConfig.intervalMin}
+                      onChange={e => onSyncIntervalChange(Number(e.target.value))}
+                      className="bg-transparent text-xs focus:outline-none cursor-pointer"
+                    >
+                      <option value={1}>1分毎</option>
+                      <option value={5}>5分毎</option>
+                      <option value={10}>10分毎</option>
+                      <option value={30}>30分毎</option>
+                    </select>
+                    <button onClick={onManualSync} disabled={syncing} className="hover:text-blue-600 transition-colors disabled:opacity-50">
+                      <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
+                )}
+                {googleUser && (
+                  <button onClick={onReimport} className="flex items-center gap-1.5">
+                    {googleUser.picture
+                      ? <img src={googleUser.picture} alt="" className="w-7 h-7 rounded-full" />
+                      : <div className="w-7 h-7 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold">{googleUser.name.slice(0,1)}</div>
+                    }
+                  </button>
+                )}
+                <button
+                  onClick={onReimport}
+                  className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <Upload size={13} />
+                  再インポート
+                </button>
+              </div>
             </div>
           </div>
 

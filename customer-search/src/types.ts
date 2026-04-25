@@ -18,4 +18,16 @@ export interface ColumnMapping {
   amount: string;
 }
 
+export interface GoogleUser {
+  name: string;
+  email: string;
+  picture: string;
+}
+
+export interface SyncConfig {
+  sheetUrl: string;
+  intervalMin: number;
+  lastSync: Date | null;
+}
+
 export type ViewMode = 'import' | 'mapping' | 'search' | 'detail';
