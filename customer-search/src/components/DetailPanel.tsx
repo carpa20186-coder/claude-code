@@ -9,6 +9,13 @@ interface Props {
   onBack: () => void;
 }
 
+const HIDDEN_COLUMNS = new Set([
+  'id', 'user_id', '分析シート反映', 'net_charge_usd', 'net_product_charge_usd',
+  'amount_refunded', 'author_fees', 'earnings_usd', 'affiliate_fees',
+  'custom_gateway', 'sale_id', 'zipcode', 'billing_address_zipcode',
+  'delivery_address_zipcode', 'coupon_amount',
+]);
+
 export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
   const totalAmount = useMemo(() => {
     if (!mapping.amount) return null;
@@ -33,7 +40,7 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
       mapping.project, mapping.contentHolder,
       '_contentHolder', '_normalizedName', '_installments', '_totalPrice', '_isContinuation', '_skip',
     ]);
-    return columns.filter(c => c && !skip.has(c));
+    return columns.filter(c => c && !skip.has(c) && !HIDDEN_COLUMNS.has(c.toLowerCase()));
   }, [columns, mapping]);
 
   const initials = (customer.name || customer.email || '?').slice(0, 2).toUpperCase();
@@ -178,10 +185,10 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
                       )}
                     </div>
                   )}
-                  {/* 決済金額（分割時のみ） */}
-                  {installments > 1 && paymentAmount && (
+                  {/* final_price – always shown */}
+                  {mapping.amount && paymentAmount && (
                     <div>
-                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">決済金額（初回）</p>
+                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">{mapping.amount}</p>
                       <p className="text-sm text-slate-700 font-medium">
                         ¥{Number(paymentAmount.replace(/[¥,￥\s]/g, '')).toLocaleString('ja-JP')}
                       </p>
