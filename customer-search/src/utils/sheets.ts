@@ -19,6 +19,17 @@ const PREFERRED_SHEET_NAMES = [
   '未来教育',
 ];
 
+const MERGED_SHEET_NAMES = [
+  '全体（IPS）',
+  '全体(IPS)',
+  '全体（未来教育）',
+  '全体(未来教育)',
+];
+
+function normalizeSheetName(value: string): string {
+  return value.replace(/\s+/g, '').toLowerCase();
+}
+
 function pickSheet(sheets: SheetMeta[], url: string): SheetMeta | undefined {
   const gidMatch = url.match(/[#&?]gid=(\d+)/);
   const gid = gidMatch ? Number.parseInt(gidMatch[1], 10) : null;
@@ -27,14 +38,47 @@ function pickSheet(sheets: SheetMeta[], url: string): SheetMeta | undefined {
     return sheets.find((sheet) => sheet.properties.sheetId === gid) ?? sheets[0];
   }
 
-  const normalized = (value: string) => value.replace(/\s+/g, '').toLowerCase();
   const preferred = PREFERRED_SHEET_NAMES
-    .map((name) => normalized(name));
+    .map((name) => normalizeSheetName(name));
 
-  return sheets.find((sheet) => preferred.includes(normalized(sheet.properties.title)))
-    ?? sheets.find((sheet) => normalized(sheet.properties.title).includes('全体'))
-    ?? sheets.find((sheet) => normalized(sheet.properties.title).includes('未来教育'))
+  return sheets.find((sheet) => preferred.includes(normalizeSheetName(sheet.properties.title)))
+    ?? sheets.find((sheet) => normalizeSheetName(sheet.properties.title).includes('全体'))
+    ?? sheets.find((sheet) => normalizeSheetName(sheet.properties.title).includes('未来教育'))
     ?? sheets[0];
+}
+
+function pickSheets(sheets: SheetMeta[], url: string): SheetMeta[] {
+  const gidMatch = url.match(/[#&?]gid=(\d+)/);
+  const gid = gidMatch ? Number.parseInt(gidMatch[1], 10) : null;
+
+  if (gid !== null) {
+    const singleSheet = sheets.find((sheet) => sheet.properties.sheetId === gid) ?? sheets[0];
+    return singleSheet ? [singleSheet] : [];
+  }
+
+  const preferred = MERGED_SHEET_NAMES.map((name) => normalizeSheetName(name));
+  const matchedSheets = preferred
+    .map((name) => sheets.find((sheet) => normalizeSheetName(sheet.properties.title) === name))
+    .filter((sheet): sheet is SheetMeta => Boolean(sheet));
+
+  if (matchedSheets.length > 0) {
+    return matchedSheets;
+  }
+
+  const fallback = pickSheet(sheets, url);
+  return fallback ? [fallback] : [];
+}
+
+async function fetchSheetValues(spreadsheetId: string, sheetName: string, token: string): Promise<string[][]> {
+  const valuesResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  if (!valuesResp.ok) throw new Error(`データ取得エラー: ${valuesResp.status}`);
+
+  const data = await valuesResp.json();
+  return data.values ?? [];
 }
 
 export async function fetchSheetWithToken(url: string, token: string): Promise<SheetResult> {
@@ -57,32 +101,43 @@ export async function fetchSheetWithToken(url: string, token: string): Promise<S
 
   const meta = await metaResp.json();
   const sheets: SheetMeta[] = meta.sheets ?? [];
-  const sheet = pickSheet(sheets, url);
-  if (!sheet) throw new Error('シートが見つかりません');
+  const selectedSheets = pickSheets(sheets, url);
+  if (selectedSheets.length === 0) throw new Error('シートが見つかりません');
 
-  const sheetName = sheet.properties.title;
-
-  // Fetch values
-  const valuesResp = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+  const sheetRows = await Promise.all(
+    selectedSheets.map(async (sheet) => ({
+      title: sheet.properties.title,
+      rows: await fetchSheetValues(spreadsheetId, sheet.properties.title, token),
+    }))
   );
 
-  if (!valuesResp.ok) throw new Error(`データ取得エラー: ${valuesResp.status}`);
+  const availableRows = sheetRows.filter(({ rows }) => rows.length >= 2);
+  if (availableRows.length === 0) throw new Error('データが空です');
 
-  const data = await valuesResp.json();
-  const rows: string[][] = data.values ?? [];
+  const columns: string[] = [];
+  for (const { rows } of availableRows) {
+    for (const header of rows[0].map((value) => String(value).trim())) {
+      if (!columns.includes(header)) {
+        columns.push(header);
+      }
+    }
+  }
 
-  if (rows.length < 2) throw new Error('データが空です');
-
-  const columns = rows[0].map(h => String(h).trim());
-  const records = rows.slice(1)
-    .filter(row => row.some(c => String(c).trim()))
-    .map(row => {
-      const rec: PurchaseRecord = {};
-      columns.forEach((col, i) => { rec[col] = String(row[i] ?? '').trim(); });
-      return rec;
-    });
+  const records = availableRows.flatMap(({ title, rows }) =>
+    rows.slice(1)
+      .filter((row) => row.some((cell) => String(cell).trim()))
+      .map((row) => {
+        const headers = rows[0].map((value) => String(value).trim());
+        const rec: PurchaseRecord = { _sourceSheet: title };
+        columns.forEach((column) => {
+          rec[column] = '';
+        });
+        headers.forEach((column, index) => {
+          rec[column] = String(row[index] ?? '').trim();
+        });
+        return rec;
+      })
+  );
 
   return { records, columns };
 }

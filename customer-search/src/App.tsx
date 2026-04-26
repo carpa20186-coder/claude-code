@@ -12,7 +12,8 @@ import { useGoogleAuth } from './hooks/useGoogleAuth';
 import type { PurchaseRecord, Customer, ColumnMapping, ViewMode, SyncConfig, ClassificationRule } from './types';
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
-const FIXED_SHEET_URL = import.meta.env.VITE_FIXED_SHEET_URL ?? '';
+const FIXED_SHEET_URL = import.meta.env.VITE_FIXED_SHEET_URL
+  ?? 'https://docs.google.com/spreadsheets/d/1qwtZzo1NL3ClHYyLfMLLnm_pt-1Z2ZTRpIQCUhs5lOs/edit?usp=sharing';
 
 export default function App() {
   const [view, setView] = useState<ViewMode>('landing');

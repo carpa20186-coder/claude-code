@@ -141,7 +141,9 @@ export function ImportPanel({
         <div className="w-full max-w-lg space-y-5">
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold text-slate-900">データをインポート</h1>
-            <p className="text-slate-500 text-sm">Googleスプレッドシートまたはアップロードして顧客データを読み込む</p>
+            <p className="text-slate-500 text-sm">
+              Googleログインで固定の社内スプレッドシートを読み込みます
+            </p>
           </div>
 
           {/* Google Auth + Sheet URL section */}
@@ -194,7 +196,8 @@ export function ImportPanel({
                         </button>
                       </div>
                       <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
-                        URLは固定です。共有権限のあるGoogleアカウントでログインした時だけ読み込めます。ログイン後は自動読込し、以後5分ごとに更新されます。
+                        URLは固定です。共有権限のあるGoogleアカウントでログインした時だけ読み込めます。
+                        「全体（IPS）」と「全体（未来教育）」の2タブをまとめて読み込み、ログイン後は自動読込し、以後5分ごとに更新されます。
                       </p>
                     </>
                   ) : (
@@ -243,7 +246,7 @@ export function ImportPanel({
                 <Upload className="text-blue-500" size={24} />
               </div>
               <p className="font-semibold text-slate-700 mb-1">CSVファイルをアップロード</p>
-              <p className="text-slate-400 text-sm">複数選択できます。ドラッグ＆ドロップ またはクリックして選択</p>
+              <p className="text-slate-400 text-sm">予備対応です。複数選択できます。ドラッグ＆ドロップ またはクリックして選択</p>
               <input
                 ref={fileRef}
                 type="file"
