@@ -1,4 +1,30 @@
-# React + TypeScript + Vite
+# customer-search
+
+## Environment variables
+
+Create `.env.local` based on `.env.example`.
+
+```bash
+cp .env.example .env.local
+```
+
+- `VITE_GOOGLE_CLIENT_ID`
+  - Google OAuth client ID for sign-in.
+- `VITE_FIXED_SHEET_URL`
+  - Fixed Google Spreadsheet URL to auto-load after sign-in.
+
+## Fixed spreadsheet sync
+
+If `VITE_FIXED_SHEET_URL` is set, the app will:
+
+- ask the user to sign in with Google
+- read the fixed spreadsheet only for users who already have access to that sheet
+- auto-load the sheet after sign-in
+- auto-sync every 5 minutes while the search screen is open
+
+The spreadsheet does not need to be public. Keep sharing limited to authorized Google accounts.
+
+## Vite template notes
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

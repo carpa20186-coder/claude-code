@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, Link, AlertCircle, Loader2, BarChart3, LogOut, RefreshCw } from 'lucide-react';
 import { parseCSVText, fetchGoogleSheet } from '../utils/csv';
 import { fetchSheetWithToken } from '../utils/sheets';
@@ -13,16 +13,24 @@ interface Props {
   onGoogleSignIn: () => void;
   onGoogleSignOut: () => void;
   clientIdConfigured: boolean;
+  fixedSheetUrl: string;
 }
 
 export function ImportPanel({
   onImport, googleToken, googleUser, googleReady, googleLoading,
-  onGoogleSignIn, onGoogleSignOut, clientIdConfigured,
+  onGoogleSignIn, onGoogleSignOut, clientIdConfigured, fixedSheetUrl,
 }: Props) {
-  const [sheetUrl, setSheetUrl] = useState('');
+  const [sheetUrl, setSheetUrl] = useState(fixedSheetUrl);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const autoImportStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (fixedSheetUrl) {
+      setSheetUrl(fixedSheetUrl);
+    }
+  }, [fixedSheetUrl]);
 
   async function handleFiles(files: FileList | File[]) {
     setError('');
@@ -65,16 +73,17 @@ export function ImportPanel({
     }
   }
 
-  async function handleSheetImport() {
-    if (!sheetUrl.trim()) return;
+  const handleSheetImport = useCallback(async (overrideUrl?: string) => {
+    const targetUrl = (overrideUrl ?? sheetUrl).trim();
+    if (!targetUrl) return;
     setError('');
     setLoading(true);
     try {
       if (googleToken) {
-        const result = await fetchSheetWithToken(sheetUrl.trim(), googleToken);
-        onImport(result.records, result.columns, sheetUrl.trim());
+        const result = await fetchSheetWithToken(targetUrl, googleToken);
+        onImport(result.records, result.columns, targetUrl);
       } else {
-        const text = await fetchGoogleSheet(sheetUrl.trim());
+        const text = await fetchGoogleSheet(targetUrl);
         const result = await parseCSVText(text);
         onImport(result.records, result.columns);
       }
@@ -83,7 +92,13 @@ export function ImportPanel({
     } finally {
       setLoading(false);
     }
-  }
+  }, [googleToken, onImport, sheetUrl]);
+
+  useEffect(() => {
+    if (!fixedSheetUrl || !googleToken || loading || autoImportStartedRef.current) return;
+    autoImportStartedRef.current = true;
+    void handleSheetImport(fixedSheetUrl);
+  }, [fixedSheetUrl, googleToken, loading, handleSheetImport]);
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -134,7 +149,7 @@ export function ImportPanel({
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                 <img src="https://www.google.com/favicon.ico" alt="Google" className="w-4 h-4" />
-                Googleスプレッドシートと連動（推奨）
+                {fixedSheetUrl ? '固定スプレッドシートと連動' : 'Googleスプレッドシートと連動（推奨）'}
               </div>
 
               {!googleToken ? (
@@ -153,37 +168,64 @@ export function ImportPanel({
               ) : (
                 <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2">
                   <span className="w-2 h-2 bg-green-500 rounded-full shrink-0" />
-                  {googleUser?.email} でログイン済み・自動同期が有効になります
+                  {googleUser?.email} でログイン済み・{fixedSheetUrl ? '固定シートを自動同期します' : '自動同期が有効になります'}
                 </div>
               )}
 
               {googleToken && (
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                    <Link size={12} />
-                    スプレッドシートURL
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      value={sheetUrl}
-                      onChange={e => setSheetUrl(e.target.value)}
-                      placeholder="https://docs.google.com/spreadsheets/d/..."
-                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                      onKeyDown={e => e.key === 'Enter' && handleSheetImport()}
-                    />
-                    <button
-                      onClick={handleSheetImport}
-                      disabled={isLoading || !sheetUrl.trim()}
-                      className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors flex items-center gap-2"
-                    >
-                      {isLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                      読み込む
-                    </button>
-                  </div>
-                  <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
-                    ログイン済みアカウントでアクセス可能なシートを直接読み込みます。gid未指定なら「全体（未来教育）」を優先し、読み込み後は5分ごとに自動更新されます。
-                  </p>
+                  {fixedSheetUrl ? (
+                    <>
+                      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                        <div className="flex items-center gap-2 text-xs font-medium text-blue-700">
+                          <Link size={12} />
+                          連動先スプレッドシート
+                        </div>
+                        <p className="mt-2 break-all text-sm text-slate-700">{fixedSheetUrl}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleSheetImport(fixedSheetUrl)}
+                          disabled={isLoading}
+                          className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors flex items-center gap-2"
+                        >
+                          {isLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                          今すぐ同期
+                        </button>
+                      </div>
+                      <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
+                        URLは固定です。共有権限のあるGoogleアカウントでログインした時だけ読み込めます。ログイン後は自動読込し、以後5分ごとに更新されます。
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <label className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+                        <Link size={12} />
+                        スプレッドシートURL
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          value={sheetUrl}
+                          onChange={e => setSheetUrl(e.target.value)}
+                          placeholder="https://docs.google.com/spreadsheets/d/..."
+                          className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                          onKeyDown={e => e.key === 'Enter' && void handleSheetImport()}
+                        />
+                        <button
+                          onClick={() => void handleSheetImport()}
+                          disabled={isLoading || !sheetUrl.trim()}
+                          className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors flex items-center gap-2"
+                        >
+                          {isLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                          読み込む
+                        </button>
+                      </div>
+                      <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
+                        ログイン済みアカウントでアクセス可能なシートを直接読み込みます。gid未指定なら「全体（未来教育）」を優先し、読み込み後は5分ごとに自動更新されます。
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -234,7 +276,7 @@ export function ImportPanel({
                       onKeyDown={e => e.key === 'Enter' && handleSheetImport()}
                     />
                     <button
-                      onClick={handleSheetImport}
+                      onClick={() => void handleSheetImport()}
                       disabled={isLoading || !sheetUrl.trim()}
                       className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
                     >

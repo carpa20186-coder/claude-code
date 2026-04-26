@@ -12,6 +12,7 @@ import { useGoogleAuth } from './hooks/useGoogleAuth';
 import type { PurchaseRecord, Customer, ColumnMapping, ViewMode, SyncConfig, ClassificationRule } from './types';
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
+const FIXED_SHEET_URL = import.meta.env.VITE_FIXED_SHEET_URL ?? '';
 
 export default function App() {
   const [view, setView] = useState<ViewMode>('landing');
@@ -111,6 +112,7 @@ export default function App() {
         onGoogleSignIn={signIn}
         onGoogleSignOut={signOut}
         clientIdConfigured={!!CLIENT_ID}
+        fixedSheetUrl={FIXED_SHEET_URL}
       />
     );
   }
