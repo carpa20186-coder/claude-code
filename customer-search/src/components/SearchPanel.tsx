@@ -38,6 +38,10 @@ export function SearchPanel({
   rules, onRulesChange,
 }: Props) {
   const [showVipOnly, setShowVipOnly] = useState(false);
+  const [vipThreshold, setVipThreshold] = useState<number>(() => {
+    const saved = localStorage.getItem('vipThreshold');
+    return saved ? Number.parseInt(saved, 10) : 300000;
+  });
   const [tab, setTab] = useState<Tab>('customers');
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -74,7 +78,6 @@ export function SearchPanel({
     [customers, query, mapping, contentHolder, project, dateFrom, dateTo]
   );
 
-  const vipThreshold = 300000;
   const isVip = (customer: Customer) => (customerStats.get(customer.key)?.totalAmount ?? 0) >= vipThreshold;
   const vipCount = useMemo(() => customers.filter(isVip).length, [customers, customerStats]);
   const displayedCustomers = useMemo(
@@ -101,6 +104,12 @@ export function SearchPanel({
   }, [holderData, query]);
 
   const activeFilterCount = [contentHolder, project, dateFrom, dateTo].filter(Boolean).length;
+
+  function handleVipThresholdChange(value: number) {
+    setVipThreshold(value);
+    localStorage.setItem('vipThreshold', String(value));
+  }
+
   function clearFilters() {
     setContentHolder(''); setProject(''); setDateFrom(''); setDateTo('');
   }
@@ -286,6 +295,45 @@ export function SearchPanel({
             </>
           )}
         </div>
+
+        {showVipOnly && tab === 'customers' && (
+          <div className="max-w-5xl mx-auto px-4 pb-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap">
+              <Crown size={15} className="text-amber-500 shrink-0" />
+              <span className="text-xs font-semibold text-amber-700">VIP基準（契約総額）</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-amber-600">¥</span>
+                <input
+                  type="number"
+                  value={vipThreshold}
+                  onChange={e => handleVipThresholdChange(Number.parseInt(e.target.value, 10) || 0)}
+                  className="w-28 border border-amber-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 text-slate-700"
+                  step={100000}
+                  min={0}
+                />
+                <span className="text-xs text-amber-600">以上</span>
+              </div>
+              <div className="flex items-center gap-1.5 ml-1">
+                {[100000, 300000, 500000, 1000000].map(value => (
+                  <button
+                    key={value}
+                    onClick={() => handleVipThresholdChange(value)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                      vipThreshold === value
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400'
+                    }`}
+                  >
+                    {value >= 10000 ? `${value / 10000}万` : value.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+              <span className="ml-auto text-xs font-bold text-amber-700">
+                {vipCount}名が対象
+              </span>
+            </div>
+          </div>
+        )}
 
         {showFilters && tab === 'customers' && (
           <div className="max-w-5xl mx-auto px-4 pb-3">
