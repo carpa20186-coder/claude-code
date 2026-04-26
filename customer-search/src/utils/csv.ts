@@ -85,7 +85,10 @@ export async function parseCSVText(text: string): Promise<{ records: PurchaseRec
     Papa.parse<PurchaseRecord>(text, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => h.trim(),
+      transformHeader: (h, index) => {
+        const trimmed = h.trim();
+        return trimmed || `__column_${index}`;
+      },
       complete: result => {
         if (result.errors.length && result.data.length === 0) {
           reject(new Error(result.errors[0].message));
