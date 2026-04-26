@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
   ChevronDown, ChevronUp, BarChart3, Package,
-  RefreshCw, Clock, Settings2, Columns3, Tag, Download,
+  RefreshCw, Clock, Settings2, Columns3, Tag, Download, Crown,
 } from 'lucide-react';
 import { filterCustomers, getUniqueValues, buildProjects, buildHolders } from '../utils/customers';
 import {
@@ -37,6 +37,7 @@ export function SearchPanel({
   syncConfig, syncing, onManualSync, googleUser, onSyncIntervalChange,
   rules, onRulesChange,
 }: Props) {
+  const [showVipOnly, setShowVipOnly] = useState(false);
   const [tab, setTab] = useState<Tab>('customers');
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -73,7 +74,13 @@ export function SearchPanel({
     [customers, query, mapping, contentHolder, project, dateFrom, dateTo]
   );
 
-  const displayedCustomers = filtered;
+  const vipThreshold = 300000;
+  const isVip = (customer: Customer) => (customerStats.get(customer.key)?.totalAmount ?? 0) >= vipThreshold;
+  const vipCount = useMemo(() => customers.filter(isVip).length, [customers, customerStats]);
+  const displayedCustomers = useMemo(
+    () => showVipOnly ? filtered.filter(isVip) : filtered,
+    [filtered, showVipOnly, customerStats]
+  );
 
   const filteredProjects = useMemo(() => {
     if (!query.trim()) return projectData;
@@ -240,23 +247,43 @@ export function SearchPanel({
             )}
           </div>
           {tab === 'customers' && (
-            <button
-              onClick={() => setShowFilters(v => !v)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
-                activeFilterCount > 0
-                  ? 'bg-blue-50 border-blue-300 text-blue-700'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <SlidersHorizontal size={15} />
-              絞り込み
-              {activeFilterCount > 0 && (
-                <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {activeFilterCount}
-                </span>
-              )}
-              {showFilters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
+            <>
+              <button
+                onClick={() => setShowVipOnly(v => !v)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
+                  showVipOnly
+                    ? 'bg-amber-50 border-amber-300 text-amber-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Crown size={15} className={showVipOnly ? 'text-amber-500' : 'text-slate-400'} />
+                VIP
+                {vipCount > 0 && (
+                  <span className={`text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold ${
+                    showVipOnly ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {vipCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowFilters(v => !v)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
+                  activeFilterCount > 0
+                    ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <SlidersHorizontal size={15} />
+                絞り込み
+                {activeFilterCount > 0 && (
+                  <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+                {showFilters ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+            </>
           )}
         </div>
 
@@ -313,16 +340,20 @@ export function SearchPanel({
       <main className="max-w-5xl mx-auto w-full px-4 py-4 space-y-2">
         {tab === 'customers' ? (
           displayedCustomers.length === 0 ? (
-            <EmptyState label="顧客が見つかりません" />
+            <EmptyState label={showVipOnly ? 'VIP顧客が見つかりません' : '顧客が見つかりません'} />
           ) : (
             <>
-              <p className="text-xs text-slate-400 pb-1 font-medium">{displayedCustomers.length}名 を表示</p>
+              <p className="text-xs text-slate-400 pb-1 font-medium">
+                {displayedCustomers.length}名 を表示
+                {showVipOnly && <span className="ml-2 text-amber-500 font-semibold">（VIPのみ）</span>}
+              </p>
               {displayedCustomers.map(c => (
                 <CustomerCard
                   key={c.key}
                   customer={c}
                   mapping={mapping}
                   onClick={() => onSelectCustomer(c)}
+                  isVip={isVip(c)}
                   total={customerStats.get(c.key)?.totalAmount ?? 0}
                   averageIntervalDays={customerStats.get(c.key)?.averagePurchaseIntervalDays ?? null}
                 />
@@ -369,11 +400,12 @@ function EmptyState({ label }: { label: string }) {
 }
 
 function CustomerCard({
-  customer, mapping, onClick, total, averageIntervalDays,
+  customer, mapping, onClick, isVip, total, averageIntervalDays,
 }: {
   customer: Customer;
   mapping: ColumnMapping;
   onClick: () => void;
+  isVip: boolean;
   total: number;
   averageIntervalDays: number | null;
 }) {
@@ -397,17 +429,31 @@ function CustomerCard({
   return (
     <button
       onClick={onClick}
-      className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-left hover:shadow-md hover:border-blue-300 transition-all group"
+      className={`w-full bg-white border rounded-2xl p-4 text-left hover:shadow-md transition-all group ${
+        isVip
+          ? 'border-amber-200 hover:border-amber-300 ring-1 ring-amber-100'
+          : 'border-slate-200 hover:border-blue-300'
+      }`}
     >
       <div className="flex items-center gap-4">
         <div className="relative shrink-0">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm transition-colors ${
+            isVip
+              ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-500 group-hover:text-white'
+              : 'bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white'
+          }`}>
             {initials}
           </div>
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="font-semibold text-slate-800 truncate">{customer.name || '(名前なし)'}</p>
+            {isVip && (
+              <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-2 py-0.5 font-bold shrink-0 flex items-center gap-1">
+                <Crown size={11} />
+                VIP
+              </span>
+            )}
           </div>
           {customer.email && <p className="text-sm text-slate-400 truncate">{customer.email}</p>}
           {contentHolders.length > 0 && (
@@ -425,7 +471,7 @@ function CustomerCard({
             {customer.purchases.length}件
           </span>
           {total > 0 && (
-            <p className="text-sm font-bold text-green-600">
+            <p className={`text-sm font-bold ${isVip ? 'text-amber-600' : 'text-green-600'}`}>
               ¥{total.toLocaleString('ja-JP')}
             </p>
           )}
