@@ -43,7 +43,7 @@ function looksLikeDate(value: string): boolean {
   return !Number.isNaN(parsed.getTime());
 }
 
-function inferDateColumn(headers: string[], records: PurchaseRecord[]): string {
+export function inferDateColumn(headers: string[], records: PurchaseRecord[]): string {
   let bestColumn = '';
   let bestScore = 0;
 

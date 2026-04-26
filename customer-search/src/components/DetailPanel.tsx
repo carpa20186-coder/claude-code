@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { ArrowLeft, Mail, ShoppingBag, TrendingUp, Calendar, BarChart3, Layers } from 'lucide-react';
 import type { Customer, ColumnMapping } from '../types';
 import { getCustomerStats } from '../utils/analytics';
+import { inferDateColumn } from '../utils/csv';
 
 interface Props {
   customer: Customer;
@@ -18,24 +19,36 @@ const HIDDEN_COLUMNS = new Set([
 ]);
 
 export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
-  const customerStats = useMemo(() => getCustomerStats(customer, mapping), [customer, mapping]);
+  const resolvedDateColumn = useMemo(
+    () => mapping.date || inferDateColumn(columns, customer.purchases),
+    [mapping.date, columns, customer.purchases]
+  );
+
+  const effectiveMapping = useMemo(
+    () => resolvedDateColumn && resolvedDateColumn !== mapping.date
+      ? { ...mapping, date: resolvedDateColumn }
+      : mapping,
+    [mapping, resolvedDateColumn]
+  );
+
+  const customerStats = useMemo(() => getCustomerStats(customer, effectiveMapping), [customer, effectiveMapping]);
   const totalAmount = customerStats.totalAmount > 0 ? customerStats.totalAmount : null;
 
   const sortedPurchases = useMemo(() => {
-    if (!mapping.date) return customer.purchases;
+    if (!resolvedDateColumn) return customer.purchases;
     return [...customer.purchases].sort((a, b) =>
-      (b[mapping.date] ?? '').localeCompare(a[mapping.date] ?? '')
+      (b[resolvedDateColumn] ?? '').localeCompare(a[resolvedDateColumn] ?? '')
     );
-  }, [customer.purchases, mapping.date]);
+  }, [customer.purchases, resolvedDateColumn]);
 
   const displayColumns = useMemo(() => {
     const skip = new Set([
-      mapping.name, mapping.email, mapping.date, mapping.amount,
+      mapping.name, mapping.email, resolvedDateColumn, mapping.amount,
       mapping.project, mapping.contentHolder,
       '_contentHolder', '_normalizedName', '_installments', '_totalPrice', '_isContinuation', '_skip',
     ]);
     return columns.filter(c => c && !skip.has(c) && !HIDDEN_COLUMNS.has(c.toLowerCase()));
-  }, [columns, mapping]);
+  }, [columns, mapping, resolvedDateColumn]);
 
   const initials = (customer.name || customer.email || '?').slice(0, 2).toUpperCase();
 
@@ -131,10 +144,10 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
             <div key={i} className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-blue-200 transition-colors">
               <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-100">
                 <div className="flex items-center gap-2 text-sm text-slate-500 flex-wrap">
-                  {mapping.date && p[mapping.date] && (
+                  {resolvedDateColumn && p[resolvedDateColumn] && (
                     <>
                       <Calendar size={13} className="text-blue-400" />
-                      <span className="font-medium text-slate-600">{p[mapping.date]}</span>
+                      <span className="font-medium text-slate-600">{p[resolvedDateColumn]}</span>
                     </>
                   )}
                   {contentHolder && (
@@ -172,6 +185,12 @@ export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
 
               {(mapping.amount || displayColumns.filter(c => p[c]?.trim()).length > 0) && (
                 <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+                  {resolvedDateColumn && p[resolvedDateColumn]?.trim() && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-0.5">購入日</p>
+                      <p className="text-sm text-slate-700 font-medium">{p[resolvedDateColumn]}</p>
+                    </div>
+                  )}
                   {/* 契約金額 – always first */}
                   {mapping.amount && (
                     <div className="col-span-2 sm:col-span-1 bg-green-50 border border-green-100 rounded-xl px-4 py-3">
