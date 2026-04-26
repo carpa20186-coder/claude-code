@@ -43,7 +43,7 @@ function looksLikeDate(value: string): boolean {
   return !Number.isNaN(parsed.getTime());
 }
 
-export function inferDateColumn(headers: string[], records: PurchaseRecord[]): string {
+export function inferDateColumn(headers: string[], records: PurchaseRecord[], minSamples = 3): string {
   let bestColumn = '';
   let bestScore = 0;
 
@@ -53,7 +53,7 @@ export function inferDateColumn(headers: string[], records: PurchaseRecord[]): s
       .filter(Boolean)
       .slice(0, 20);
 
-    if (values.length < 3) continue;
+    if (values.length < minSamples) continue;
 
     const dateLikeCount = values.filter(looksLikeDate).length;
     const score = dateLikeCount / values.length;

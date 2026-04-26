@@ -20,7 +20,7 @@ const HIDDEN_COLUMNS = new Set([
 
 export function DetailPanel({ customer, columns, mapping, onBack }: Props) {
   const resolvedDateColumn = useMemo(
-    () => mapping.date || inferDateColumn(columns, customer.purchases),
+    () => mapping.date || inferDateColumn(columns, customer.purchases, 1),
     [mapping.date, columns, customer.purchases]
   );
 
