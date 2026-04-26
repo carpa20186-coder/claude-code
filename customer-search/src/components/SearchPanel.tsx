@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import {
   Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
   ChevronDown, ChevronUp, BarChart3, Package,
-  RefreshCw, Clock, Settings2, Columns3, Tag, Download, Crown, Clipboard, Mail,
+  RefreshCw, Clock, Settings2, Columns3, Tag, Download, Crown, Clipboard, Mail, ArrowRight, LayoutGrid,
 } from 'lucide-react';
 import { filterCustomers, getUniqueValues, buildProjects, buildHolders } from '../utils/customers';
 import {
@@ -13,7 +13,7 @@ import { RulesPanel } from './RulesPanel';
 import type { Customer, ColumnMapping, PurchaseRecord, SyncConfig, GoogleUser, ClassificationRule } from '../types';
 import type { Project, Holder } from '../utils/customers';
 
-type Tab = 'customers' | 'projects' | 'holders' | 'bulkHistory';
+type Tab = 'home' | 'customers' | 'projects' | 'holders' | 'bulkHistory';
 
 interface Props {
   customers: Customer[];
@@ -42,7 +42,7 @@ export function SearchPanel({
     const saved = localStorage.getItem('vipThreshold');
     return saved ? Number.parseInt(saved, 10) : 300000;
   });
-  const [tab, setTab] = useState<Tab>('customers');
+  const [tab, setTab] = useState<Tab>('home');
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -308,7 +308,7 @@ export function SearchPanel({
 
           {/* Tabs */}
           <div className="flex gap-1">
-            {([['customers', '顧客別', Users], ['projects', '商品別', Package], ['holders', 'ホルダー別', Tag], ['bulkHistory', '購入履歴一括照合', Mail]] as const).map(([key, label, Icon]) => (
+            {([['home', '機能一覧', LayoutGrid], ['customers', '顧客別', Users], ['projects', '商品別', Package], ['holders', 'ホルダー別', Tag], ['bulkHistory', '購入履歴一括照合', Mail]] as const).map(([key, label, Icon]) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
@@ -327,7 +327,7 @@ export function SearchPanel({
       </header>
 
       {/* Search & filters */}
-      {tab !== 'bulkHistory' && (
+      {tab !== 'bulkHistory' && tab !== 'home' && (
       <div className="bg-white border-b border-slate-200 sticky top-[89px] z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex gap-2">
           <div className="flex-1 relative">
@@ -477,7 +477,15 @@ export function SearchPanel({
 
       {/* Content */}
       <main className="max-w-5xl mx-auto w-full px-4 py-4 space-y-2">
-        {tab === 'bulkHistory' ? (
+        {tab === 'home' ? (
+          <FunctionHome
+            vipCount={vipCount}
+            customerCount={customers.length}
+            projectCount={projectData.length}
+            holderCount={holderData.length}
+            onSelect={setTab}
+          />
+        ) : tab === 'bulkHistory' ? (
           <BulkHistoryPanel
             input={bulkInput}
             onInputChange={setBulkInput}
@@ -545,6 +553,119 @@ export function SearchPanel({
 function extractEmails(input: string): string[] {
   const matches = input.toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g);
   return matches ?? [];
+}
+
+function FunctionHome({
+  vipCount,
+  customerCount,
+  projectCount,
+  holderCount,
+  onSelect,
+}: {
+  vipCount: number;
+  customerCount: number;
+  projectCount: number;
+  holderCount: number;
+  onSelect: (tab: Tab) => void;
+}) {
+  return (
+    <section className="space-y-6">
+      <div className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-6 py-7 text-white shadow-xl shadow-slate-900/10">
+        <div className="max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200/80">Function Select</p>
+          <h1 className="mt-3 text-3xl font-black tracking-tight">まず使いたい機能を選ぶ</h1>
+          <p className="mt-3 text-sm leading-7 text-slate-300">
+            顧客検索、VIP抽出、商品別確認、ホルダー別確認、購入履歴の一括照合まで、目的ごとに入口を分けています。
+          </p>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-3 text-xs">
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200">{customerCount}名の顧客データ</span>
+          <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-amber-200">VIP候補 {vipCount}名</span>
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200">{projectCount}件の商品</span>
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200">{holderCount}件のホルダー</span>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <FunctionCard
+          title="顧客別"
+          description="名前やメールで顧客を検索し、過去購入履歴を確認します。VIP顧客だけを基準額つきで素早く絞り込めます。"
+          meta={`${customerCount}名 / VIP ${vipCount}名`}
+          icon={<Users size={20} />}
+          tone="blue"
+          onClick={() => onSelect('customers')}
+        />
+        <FunctionCard
+          title="商品別"
+          description="どの商品に誰が入っているかを一覧化して、商品ごとの購入者をまとまって確認します。"
+          meta={`${projectCount}件の商品`}
+          icon={<Package size={20} />}
+          tone="emerald"
+          onClick={() => onSelect('projects')}
+        />
+        <FunctionCard
+          title="ホルダー別"
+          description="コンテンツホルダー単位で顧客を確認し、販売元ごとの購入傾向をざっと把握できます。"
+          meta={`${holderCount}件のホルダー`}
+          icon={<Tag size={20} />}
+          tone="violet"
+          onClick={() => onSelect('holders')}
+        />
+        <FunctionCard
+          title="購入履歴一括照合"
+          description="セミナーや講座の購入者メールをまとめて貼り付けて、既存顧客の過去購入履歴を一括で照合します。"
+          meta="メール貼り付け対応"
+          icon={<Mail size={20} />}
+          tone="amber"
+          onClick={() => onSelect('bulkHistory')}
+        />
+      </div>
+    </section>
+  );
+}
+
+function FunctionCard({
+  title,
+  description,
+  meta,
+  icon,
+  tone,
+  onClick,
+}: {
+  title: string;
+  description: string;
+  meta: string;
+  icon: ReactNode;
+  tone: 'blue' | 'emerald' | 'violet' | 'amber';
+  onClick: () => void;
+}) {
+  const toneClasses = {
+    blue: 'from-blue-50 to-white border-blue-200 text-blue-700 shadow-blue-100/70',
+    emerald: 'from-emerald-50 to-white border-emerald-200 text-emerald-700 shadow-emerald-100/70',
+    violet: 'from-violet-50 to-white border-violet-200 text-violet-700 shadow-violet-100/70',
+    amber: 'from-amber-50 to-white border-amber-200 text-amber-700 shadow-amber-100/70',
+  }[tone];
+
+  return (
+    <button
+      onClick={onClick}
+      className={`group rounded-[24px] border bg-gradient-to-br p-5 text-left shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl ${toneClasses}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
+            {icon}
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+            <p className="mt-1 text-xs font-semibold tracking-wide text-slate-500">{meta}</p>
+          </div>
+        </div>
+        <ArrowRight size={18} className="mt-1 text-slate-400 transition-transform group-hover:translate-x-1" />
+      </div>
+      <p className="mt-4 text-sm leading-7 text-slate-600">{description}</p>
+    </button>
+  );
 }
 
 function getPurchaseName(purchase: PurchaseRecord, mapping: ColumnMapping): string {
