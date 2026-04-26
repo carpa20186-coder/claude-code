@@ -200,7 +200,6 @@ export function SearchPanel({
                 </button>
               </div>
             </div>
-          </div>
 
           {/* Tabs */}
           <div className="flex gap-1">
