@@ -484,6 +484,14 @@ export function SearchPanel({
             projectCount={projectData.length}
             holderCount={holderData.length}
             onSelect={setTab}
+            onOpenCustomers={() => {
+              setShowVipOnly(false);
+              setTab('customers');
+            }}
+            onOpenVip={() => {
+              setShowVipOnly(true);
+              setTab('customers');
+            }}
           />
         ) : tab === 'bulkHistory' ? (
           <BulkHistoryPanel
@@ -561,46 +569,59 @@ function FunctionHome({
   projectCount,
   holderCount,
   onSelect,
+  onOpenCustomers,
+  onOpenVip,
 }: {
   vipCount: number;
   customerCount: number;
   projectCount: number;
   holderCount: number;
   onSelect: (tab: Tab) => void;
+  onOpenCustomers: () => void;
+  onOpenVip: () => void;
 }) {
   return (
     <section className="space-y-6">
-      <div className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-6 py-7 text-white shadow-xl shadow-slate-900/10">
-        <div className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200/80">Function Select</p>
-          <h1 className="mt-3 text-3xl font-black tracking-tight">まず使いたい機能を選ぶ</h1>
-          <p className="mt-3 text-sm leading-7 text-slate-300">
-            顧客検索、VIP抽出、商品別確認、ホルダー別確認、購入履歴の一括照合まで、目的ごとに入口を分けています。
+      <div className="relative overflow-hidden rounded-[32px] border border-blue-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.28),_transparent_32%),linear-gradient(135deg,_#eff6ff_0%,_#dbeafe_46%,_#ffffff_100%)] px-6 py-7 shadow-[0_28px_80px_-36px_rgba(37,99,235,0.45)]">
+        <div className="absolute inset-y-0 right-0 hidden w-1/3 bg-[radial-gradient(circle_at_center,_rgba(96,165,250,0.24),_transparent_62%)] md:block" />
+        <div className="relative max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-700/80">Function Select</p>
+          <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950">まず使いたい機能を選ぶ</h1>
+          <p className="mt-3 text-sm leading-7 text-slate-600">
+            顧客検索、VIP抽出、商品別確認、ホルダー別確認、購入履歴の一括照合まで、入口を分けて見やすくしています。
           </p>
         </div>
         <div className="mt-6 flex flex-wrap gap-3 text-xs">
-          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200">{customerCount}名の顧客データ</span>
-          <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-amber-200">VIP候補 {vipCount}名</span>
-          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200">{projectCount}件の商品</span>
-          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200">{holderCount}件のホルダー</span>
+          <span className="rounded-full border border-blue-200 bg-white/80 px-3 py-1.5 text-slate-700 shadow-sm">{customerCount}名の顧客データ</span>
+          <span className="rounded-full border border-blue-300 bg-blue-600 px-3 py-1.5 text-white shadow-sm shadow-blue-300/50">VIP候補 {vipCount}名</span>
+          <span className="rounded-full border border-blue-200 bg-white/80 px-3 py-1.5 text-slate-700 shadow-sm">{projectCount}件の商品</span>
+          <span className="rounded-full border border-blue-200 bg-white/80 px-3 py-1.5 text-slate-700 shadow-sm">{holderCount}件のホルダー</span>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <FunctionCard
           title="顧客別"
-          description="名前やメールで顧客を検索し、過去購入履歴を確認します。VIP顧客だけを基準額つきで素早く絞り込めます。"
-          meta={`${customerCount}名 / VIP ${vipCount}名`}
+          description="名前やメールで顧客を検索し、過去購入履歴を確認します。通常の顧客一覧をまず見たい時の入口です。"
+          meta={`${customerCount}名の顧客`}
           icon={<Users size={20} />}
-          tone="blue"
-          onClick={() => onSelect('customers')}
+          tone="primary"
+          onClick={onOpenCustomers}
+        />
+        <FunctionCard
+          title="VIP顧客"
+          description="VIP候補だけをすぐに開いて、基準額つきで確認します。高単価購入者だけを先に見たい時に使えます。"
+          meta={`${vipCount}名のVIP候補`}
+          icon={<Crown size={20} />}
+          tone="vip"
+          onClick={onOpenVip}
         />
         <FunctionCard
           title="商品別"
           description="どの商品に誰が入っているかを一覧化して、商品ごとの購入者をまとまって確認します。"
           meta={`${projectCount}件の商品`}
           icon={<Package size={20} />}
-          tone="emerald"
+          tone="secondary"
           onClick={() => onSelect('projects')}
         />
         <FunctionCard
@@ -608,7 +629,7 @@ function FunctionHome({
           description="コンテンツホルダー単位で顧客を確認し、販売元ごとの購入傾向をざっと把握できます。"
           meta={`${holderCount}件のホルダー`}
           icon={<Tag size={20} />}
-          tone="violet"
+          tone="secondary"
           onClick={() => onSelect('holders')}
         />
         <FunctionCard
@@ -616,7 +637,7 @@ function FunctionHome({
           description="セミナーや講座の購入者メールをまとめて貼り付けて、既存顧客の過去購入履歴を一括で照合します。"
           meta="メール貼り付け対応"
           icon={<Mail size={20} />}
-          tone="amber"
+          tone="accent"
           onClick={() => onSelect('bulkHistory')}
         />
       </div>
@@ -636,34 +657,52 @@ function FunctionCard({
   description: string;
   meta: string;
   icon: ReactNode;
-  tone: 'blue' | 'emerald' | 'violet' | 'amber';
+  tone: 'primary' | 'secondary' | 'accent' | 'vip';
   onClick: () => void;
 }) {
   const toneClasses = {
-    blue: 'from-blue-50 to-white border-blue-200 text-blue-700 shadow-blue-100/70',
-    emerald: 'from-emerald-50 to-white border-emerald-200 text-emerald-700 shadow-emerald-100/70',
-    violet: 'from-violet-50 to-white border-violet-200 text-violet-700 shadow-violet-100/70',
-    amber: 'from-amber-50 to-white border-amber-200 text-amber-700 shadow-amber-100/70',
+    primary: 'border-blue-200 bg-[linear-gradient(180deg,_rgba(239,246,255,0.96),_rgba(255,255,255,1))] shadow-[0_24px_50px_-32px_rgba(59,130,246,0.42)]',
+    secondary: 'border-sky-200 bg-[linear-gradient(180deg,_rgba(248,250,252,1),_rgba(239,246,255,0.88))] shadow-[0_24px_50px_-32px_rgba(14,165,233,0.32)]',
+    accent: 'border-cyan-200 bg-[linear-gradient(180deg,_rgba(240,249,255,1),_rgba(255,255,255,1))] shadow-[0_24px_50px_-32px_rgba(6,182,212,0.32)]',
+    vip: 'border-blue-300 bg-[linear-gradient(135deg,_rgba(30,64,175,0.98),_rgba(37,99,235,0.96)_52%,_rgba(96,165,250,0.94)_100%)] shadow-[0_28px_64px_-30px_rgba(37,99,235,0.72)]',
   }[tone];
+
+  const iconClasses = {
+    primary: 'bg-blue-600 text-white shadow-blue-200/80',
+    secondary: 'bg-white text-blue-700 shadow-blue-100/70',
+    accent: 'bg-cyan-600 text-white shadow-cyan-200/80',
+    vip: 'bg-white/16 text-white ring-1 ring-white/20 shadow-blue-900/20',
+  }[tone];
+
+  const metaClasses = {
+    primary: 'text-blue-700/80',
+    secondary: 'text-sky-700/80',
+    accent: 'text-cyan-700/80',
+    vip: 'text-blue-100',
+  }[tone];
+
+  const titleClasses = tone === 'vip' ? 'text-white' : 'text-slate-900';
+  const bodyClasses = tone === 'vip' ? 'text-blue-50/90' : 'text-slate-600';
+  const arrowClasses = tone === 'vip' ? 'text-white/75' : 'text-slate-400';
 
   return (
     <button
       onClick={onClick}
-      className={`group rounded-[24px] border bg-gradient-to-br p-5 text-left shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl ${toneClasses}`}
+      className={`group rounded-[26px] p-5 text-left transition-all hover:-translate-y-1 hover:shadow-[0_32px_70px_-34px_rgba(37,99,235,0.5)] ${toneClasses}`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm">
+          <div className={`flex h-11 w-11 items-center justify-center rounded-2xl shadow-sm ${iconClasses}`}>
             {icon}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-            <p className="mt-1 text-xs font-semibold tracking-wide text-slate-500">{meta}</p>
+            <h2 className={`text-lg font-bold ${titleClasses}`}>{title}</h2>
+            <p className={`mt-1 text-xs font-semibold tracking-wide ${metaClasses}`}>{meta}</p>
           </div>
         </div>
-        <ArrowRight size={18} className="mt-1 text-slate-400 transition-transform group-hover:translate-x-1" />
+        <ArrowRight size={18} className={`mt-1 transition-transform group-hover:translate-x-1 ${arrowClasses}`} />
       </div>
-      <p className="mt-4 text-sm leading-7 text-slate-600">{description}</p>
+      <p className={`mt-4 text-sm leading-7 ${bodyClasses}`}>{description}</p>
     </button>
   );
 }
