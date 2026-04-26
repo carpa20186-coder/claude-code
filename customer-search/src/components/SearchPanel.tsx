@@ -664,26 +664,26 @@ function FunctionCard({
     primary: 'border-blue-200 bg-[linear-gradient(180deg,_rgba(239,246,255,0.96),_rgba(255,255,255,1))] shadow-[0_24px_50px_-32px_rgba(59,130,246,0.42)]',
     secondary: 'border-sky-200 bg-[linear-gradient(180deg,_rgba(248,250,252,1),_rgba(239,246,255,0.88))] shadow-[0_24px_50px_-32px_rgba(14,165,233,0.32)]',
     accent: 'border-cyan-200 bg-[linear-gradient(180deg,_rgba(240,249,255,1),_rgba(255,255,255,1))] shadow-[0_24px_50px_-32px_rgba(6,182,212,0.32)]',
-    vip: 'border-blue-300 bg-[linear-gradient(135deg,_rgba(30,64,175,0.98),_rgba(37,99,235,0.96)_52%,_rgba(96,165,250,0.94)_100%)] shadow-[0_28px_64px_-30px_rgba(37,99,235,0.72)]',
+    vip: 'border-blue-200 bg-[linear-gradient(180deg,_rgba(239,246,255,0.94),_rgba(255,255,255,1))] shadow-[0_24px_50px_-32px_rgba(59,130,246,0.38)]',
   }[tone];
 
   const iconClasses = {
     primary: 'bg-blue-600 text-white shadow-blue-200/80',
     secondary: 'bg-white text-blue-700 shadow-blue-100/70',
     accent: 'bg-cyan-600 text-white shadow-cyan-200/80',
-    vip: 'bg-white/16 text-white ring-1 ring-white/20 shadow-blue-900/20',
+    vip: 'bg-white text-blue-700 shadow-blue-100/70',
   }[tone];
 
   const metaClasses = {
     primary: 'text-blue-700/80',
     secondary: 'text-sky-700/80',
     accent: 'text-cyan-700/80',
-    vip: 'text-blue-100',
+    vip: 'text-blue-700/80',
   }[tone];
 
-  const titleClasses = tone === 'vip' ? 'text-white' : 'text-slate-900';
-  const bodyClasses = tone === 'vip' ? 'text-blue-50/90' : 'text-slate-600';
-  const arrowClasses = tone === 'vip' ? 'text-white/75' : 'text-slate-400';
+  const titleClasses = 'text-slate-900';
+  const bodyClasses = 'text-slate-600';
+  const arrowClasses = 'text-slate-400';
 
   return (
     <button
