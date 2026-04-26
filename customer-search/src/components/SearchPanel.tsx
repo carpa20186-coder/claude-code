@@ -117,29 +117,35 @@ export function SearchPanel({
   }
 
   function handleExportCsv() {
-    const header = ['顧客名', 'メールアドレス', '購入件数', 'LTV', '平均購入間隔(日)', '最終購入日', '休眠フラグ', 'ホルダー'];
-    const rows = displayedCustomers.map((customer) => {
-      const stats = customerStats.get(customer.key) ?? getCustomerStats(customer, mapping);
-      const holders = Array.from(new Set(
-        customer.purchases
-          .map((purchase) => (purchase['_contentHolder'] ?? '').trim())
-          .filter(Boolean)
-      )).join(' / ');
-
-      return [
-        customer.name || '',
-        customer.email || '',
-        String(customer.purchases.length),
-        String(Math.round(stats.totalAmount)),
-        stats.averagePurchaseIntervalDays !== null ? String(Math.round(stats.averagePurchaseIntervalDays)) : '',
-        stats.lastPurchaseDate ?? '',
-        '',
-        holders,
-      ];
-    });
-
     const dateLabel = new Date().toISOString().slice(0, 10);
-    downloadCsv(`customer-search-${dateLabel}.csv`, [header, ...rows]);
+    const customerMap = new Map<string, Customer>();
+
+    const addCustomers = (items: Customer[]) => {
+      for (const customer of items) {
+        const key = customer.email || customer.key;
+        if (!key || customerMap.has(key)) continue;
+        customerMap.set(key, customer);
+      }
+    };
+
+    if (tab === 'customers') {
+      addCustomers(displayedCustomers);
+    } else if (tab === 'projects') {
+      for (const projectItem of filteredProjects) {
+        addCustomers(projectItem.customers);
+      }
+    } else if (tab === 'holders') {
+      for (const holderItem of filteredHolders) {
+        addCustomers(holderItem.customers);
+      }
+    }
+
+    const rows = Array.from(customerMap.values())
+      .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'ja'))
+      .map((customer) => [customer.name || '', customer.email || '']);
+
+    const tabLabel = tab === 'projects' ? 'products' : tab === 'holders' ? 'holders' : 'customers';
+    downloadCsv(`customer-list-${tabLabel}-${dateLabel}.csv`, [['顧客名', 'メールアドレス'], ...rows]);
   }
 
   const bulkEmailData = useMemo(() => {
