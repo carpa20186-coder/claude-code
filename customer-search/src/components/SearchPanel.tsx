@@ -110,6 +110,9 @@ export function SearchPanel({
   function handleVipThresholdChange(value: number) {
     setVipThreshold(value);
     localStorage.setItem('vipThreshold', String(value));
+    if (tab === 'customers') {
+      setShowVipOnly(true);
+    }
   }
 
   function clearFilters() {
