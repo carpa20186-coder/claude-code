@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   Search, SlidersHorizontal, Users, ShoppingBag, X, Upload,
   ChevronDown, ChevronUp, BarChart3, Package,
-  RefreshCw, Clock, Settings2, Columns3, Tag, Download, Crown,
+  RefreshCw, Clock, Settings2, Columns3, Tag, Download, Crown, Clipboard, Mail,
 } from 'lucide-react';
 import { filterCustomers, getUniqueValues, buildProjects, buildHolders } from '../utils/customers';
 import {
@@ -13,7 +13,7 @@ import { RulesPanel } from './RulesPanel';
 import type { Customer, ColumnMapping, PurchaseRecord, SyncConfig, GoogleUser, ClassificationRule } from '../types';
 import type { Project, Holder } from '../utils/customers';
 
-type Tab = 'customers' | 'projects' | 'holders';
+type Tab = 'customers' | 'projects' | 'holders' | 'bulkHistory';
 
 interface Props {
   customers: Customer[];
@@ -46,6 +46,8 @@ export function SearchPanel({
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [bulkInput, setBulkInput] = useState('');
+  const [copyStatus, setCopyStatus] = useState('');
   const [contentHolder, setContentHolder] = useState('');
   const [project, setProject] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -140,6 +142,93 @@ export function SearchPanel({
     downloadCsv(`customer-search-${dateLabel}.csv`, [header, ...rows]);
   }
 
+  const bulkEmailData = useMemo(() => {
+    const emails = extractEmails(bulkInput);
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+    const uniqueEmails: string[] = [];
+
+    for (const email of emails) {
+      if (seen.has(email)) {
+        duplicates.add(email);
+        continue;
+      }
+      seen.add(email);
+      uniqueEmails.push(email);
+    }
+
+    return { emails, uniqueEmails, duplicates: Array.from(duplicates) };
+  }, [bulkInput]);
+
+  const bulkResults = useMemo(() => {
+    const customerByEmail = new Map(
+      customers
+        .filter((customer) => customer.email)
+        .map((customer) => [customer.email.toLowerCase(), customer] as const)
+    );
+
+    const matches: Customer[] = [];
+    const unmatched: string[] = [];
+
+    for (const email of bulkEmailData.uniqueEmails) {
+      const customer = customerByEmail.get(email);
+      if (customer) {
+        matches.push(customer);
+      } else {
+        unmatched.push(email);
+      }
+    }
+
+    return { matches, unmatched };
+  }, [customers, bulkEmailData.uniqueEmails]);
+
+  async function copyText(text: string, successMessage: string) {
+    if (!text.trim()) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyStatus(successMessage);
+      window.setTimeout(() => setCopyStatus(''), 2000);
+    } catch {
+      setCopyStatus('コピーに失敗しました');
+      window.setTimeout(() => setCopyStatus(''), 2000);
+    }
+  }
+
+  const bulkSummaryText = useMemo(() => {
+    return bulkResults.matches.map((customer) => {
+      const stats = customerStats.get(customer.key) ?? getCustomerStats(customer, mapping);
+      const purchaseNames = customer.purchases
+        .map((purchase) => getPurchaseName(purchase, mapping))
+        .filter(Boolean);
+
+      return [
+        `${customer.name || '(名前なし)'} (${customer.email || '-'})`,
+        `- 過去購入 ${customer.purchases.length}件`,
+        purchaseNames.length > 0 ? `- 購入商品: ${purchaseNames.join('、')}` : '- 購入商品: なし',
+        `- 累計 ${formatCurrency(stats.totalAmount)}`,
+        `- 最終購入日 ${stats.lastPurchaseDate ?? '-'}`,
+      ].join('\n');
+    }).join('\n\n');
+  }, [bulkResults.matches, customerStats, mapping]);
+
+  const bulkDetailedText = useMemo(() => {
+    return bulkResults.matches.map((customer) => {
+      const stats = customerStats.get(customer.key) ?? getCustomerStats(customer, mapping);
+      const lines = customer.purchases.map((purchase) => {
+        const name = getPurchaseName(purchase, mapping);
+        const amount = formatCurrencyValue(purchase['_totalPrice'] ?? purchase[mapping.amount]);
+        const date = mapping.date ? (purchase[mapping.date] ?? '').trim() : '';
+        return `- ${[date, name, amount].filter(Boolean).join(' | ')}`;
+      });
+
+      return [
+        `${customer.name || '(名前なし)'} (${customer.email || '-'})`,
+        `累計: ${formatCurrency(stats.totalAmount)} / 最終購入日: ${stats.lastPurchaseDate ?? '-'}`,
+        ...lines,
+      ].join('\n');
+    }).join('\n\n');
+  }, [bulkResults.matches, customerStats, mapping]);
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {showRules && (
@@ -219,7 +308,7 @@ export function SearchPanel({
 
           {/* Tabs */}
           <div className="flex gap-1">
-            {([['customers', '顧客別', Users], ['projects', '商品別', Package], ['holders', 'ホルダー別', Tag]] as const).map(([key, label, Icon]) => (
+            {([['customers', '顧客別', Users], ['projects', '商品別', Package], ['holders', 'ホルダー別', Tag], ['bulkHistory', '購入履歴一括照合', Mail]] as const).map(([key, label, Icon]) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
@@ -238,6 +327,7 @@ export function SearchPanel({
       </header>
 
       {/* Search & filters */}
+      {tab !== 'bulkHistory' && (
       <div className="bg-white border-b border-slate-200 sticky top-[89px] z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex gap-2">
           <div className="flex-1 relative">
@@ -383,10 +473,26 @@ export function SearchPanel({
           </div>
         )}
       </div>
+      )}
 
       {/* Content */}
       <main className="max-w-5xl mx-auto w-full px-4 py-4 space-y-2">
-        {tab === 'customers' ? (
+        {tab === 'bulkHistory' ? (
+          <BulkHistoryPanel
+            input={bulkInput}
+            onInputChange={setBulkInput}
+            matchCount={bulkResults.matches.length}
+            unmatched={bulkResults.unmatched}
+            duplicateEmails={bulkEmailData.duplicates}
+            matches={bulkResults.matches}
+            mapping={mapping}
+            customerStats={customerStats}
+            copyStatus={copyStatus}
+            onCopySummary={() => copyText(bulkSummaryText, '要約をコピーしました')}
+            onCopyDetailed={() => copyText(bulkDetailedText, '詳細をコピーしました')}
+            onCopyUnmatched={() => copyText(bulkResults.unmatched.join('\n'), '未一致メールをコピーしました')}
+          />
+        ) : tab === 'customers' ? (
           displayedCustomers.length === 0 ? (
             <EmptyState label={showVipOnly ? 'VIP顧客が見つかりません' : '顧客が見つかりません'} />
           ) : (
@@ -436,6 +542,31 @@ export function SearchPanel({
   );
 }
 
+function extractEmails(input: string): string[] {
+  const matches = input.toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g);
+  return matches ?? [];
+}
+
+function getPurchaseName(purchase: PurchaseRecord, mapping: ColumnMapping): string {
+  const primary = (mapping.project ? purchase[mapping.project] : '')?.trim();
+  if (primary) return primary;
+
+  const holder = (purchase['_contentHolder'] ?? (mapping.contentHolder ? purchase[mapping.contentHolder] : '') ?? '').trim();
+  if (holder) return holder;
+
+  return '商品名なし';
+}
+
+function formatCurrency(amount: number): string {
+  return `¥${Math.round(amount).toLocaleString('ja-JP')}`;
+}
+
+function formatCurrencyValue(raw: string | undefined): string {
+  const normalized = (raw ?? '').replace(/[¥,￥\s]/g, '');
+  const amount = Number.parseFloat(normalized);
+  return Number.isFinite(amount) && amount > 0 ? formatCurrency(amount) : '';
+}
+
 function EmptyState({ label }: { label: string }) {
   return (
     <div className="text-center py-20 text-slate-400">
@@ -443,6 +574,193 @@ function EmptyState({ label }: { label: string }) {
         <Search size={28} className="opacity-40" />
       </div>
       <p className="font-medium">{label}</p>
+    </div>
+  );
+}
+
+function BulkHistoryPanel({
+  input,
+  onInputChange,
+  matchCount,
+  unmatched,
+  duplicateEmails,
+  matches,
+  mapping,
+  customerStats,
+  copyStatus,
+  onCopySummary,
+  onCopyDetailed,
+  onCopyUnmatched,
+}: {
+  input: string;
+  onInputChange: (value: string) => void;
+  matchCount: number;
+  unmatched: string[];
+  duplicateEmails: string[];
+  matches: Customer[];
+  mapping: ColumnMapping;
+  customerStats: Map<string, ReturnType<typeof getCustomerStats>>;
+  copyStatus: string;
+  onCopySummary: () => void;
+  onCopyDetailed: () => void;
+  onCopyUnmatched: () => void;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">購入履歴一括照合</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              購入者メールアドレスを貼り付けると、既存顧客データと照合して過去の購入履歴をまとめて確認できます。
+            </p>
+          </div>
+          {copyStatus && (
+            <div className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              {copyStatus}
+            </div>
+          )}
+        </div>
+
+        <textarea
+          value={input}
+          onChange={(event) => onInputChange(event.target.value)}
+          placeholder={'メールアドレス一覧を貼り付け\nexample1@example.com\nexample2@example.com'}
+          className="w-full min-h-40 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        />
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button
+            onClick={onCopySummary}
+            disabled={matches.length === 0}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+          >
+            <Clipboard size={15} />
+            要約コピー
+          </button>
+          <button
+            onClick={onCopyDetailed}
+            disabled={matches.length === 0}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-40"
+          >
+            <Clipboard size={15} />
+            詳細コピー
+          </button>
+          <button
+            onClick={onCopyUnmatched}
+            disabled={unmatched.length === 0}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-40"
+          >
+            <Clipboard size={15} />
+            未一致コピー
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <SummaryMiniCard label="一致" value={`${matchCount}名`} tone="blue" />
+        <SummaryMiniCard label="未一致" value={`${unmatched.length}件`} tone="amber" />
+        <SummaryMiniCard label="重複メール" value={`${duplicateEmails.length}件`} tone="slate" />
+      </div>
+
+      {duplicateEmails.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <p className="text-sm font-semibold text-amber-800 mb-2">重複メール</p>
+          <p className="text-xs text-amber-700 leading-relaxed">{duplicateEmails.join(', ')}</p>
+        </div>
+      )}
+
+      {unmatched.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4">
+          <p className="text-sm font-semibold text-slate-800 mb-2">未一致メール</p>
+          <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap">{unmatched.join('\n')}</p>
+        </div>
+      )}
+
+      {matches.length === 0 ? (
+        <EmptyState label="一致する顧客がまだありません" />
+      ) : (
+        <>
+          <p className="text-xs text-slate-400 pb-1 font-medium">{matches.length}名の購入履歴を表示</p>
+          {matches.map((customer) => (
+            <BulkHistoryCard
+              key={customer.key}
+              customer={customer}
+              mapping={mapping}
+              stats={customerStats.get(customer.key) ?? getCustomerStats(customer, mapping)}
+            />
+          ))}
+        </>
+      )}
+    </section>
+  );
+}
+
+function SummaryMiniCard({ label, value, tone }: { label: string; value: string; tone: 'blue' | 'amber' | 'slate' }) {
+  const toneClass = {
+    blue: 'bg-blue-50 border-blue-200 text-blue-700',
+    amber: 'bg-amber-50 border-amber-200 text-amber-700',
+    slate: 'bg-slate-50 border-slate-200 text-slate-700',
+  }[tone];
+
+  return (
+    <div className={`border rounded-2xl px-4 py-4 ${toneClass}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</p>
+      <p className="mt-2 text-2xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function BulkHistoryCard({
+  customer,
+  mapping,
+  stats,
+}: {
+  customer: Customer;
+  mapping: ColumnMapping;
+  stats: ReturnType<typeof getCustomerStats>;
+}) {
+  const purchases = useMemo(() => {
+    return [...customer.purchases].sort((a, b) => {
+      if (!mapping.date) return 0;
+      const aDate = a[mapping.date] ?? '';
+      const bDate = b[mapping.date] ?? '';
+      return bDate.localeCompare(aDate);
+    });
+  }, [customer.purchases, mapping.date]);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <p className="font-semibold text-slate-900">{customer.name || '(名前なし)'}</p>
+          <p className="text-sm text-slate-500">{customer.email || '-'}</p>
+        </div>
+        <div className="text-right text-xs text-slate-500">
+          <p>{customer.purchases.length}件</p>
+          <p className="font-bold text-green-600 mt-1">{formatCurrency(stats.totalAmount)}</p>
+          <p className="mt-1">{stats.lastPurchaseDate ?? '-'}</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {purchases.map((purchase, index) => (
+          <div key={`${customer.key}-${index}`} className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2 text-sm">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-slate-700">
+              <span className="font-medium">{getPurchaseName(purchase, mapping)}</span>
+              {mapping.date && (purchase[mapping.date] ?? '').trim() && (
+                <span className="text-slate-500">{purchase[mapping.date]}</span>
+              )}
+              {formatCurrencyValue(purchase['_totalPrice'] ?? purchase[mapping.amount]) && (
+                <span className="text-green-600 font-medium">{formatCurrencyValue(purchase['_totalPrice'] ?? purchase[mapping.amount])}</span>
+              )}
+              {(purchase['_contentHolder'] ?? '').trim() && (
+                <span className="text-blue-600">{purchase['_contentHolder']}</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
