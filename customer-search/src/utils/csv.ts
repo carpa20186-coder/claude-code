@@ -26,13 +26,56 @@ function findColumn(headers: string[], candidates: string[]): string {
   return '';
 }
 
-export function autoDetectMapping(headers: string[]): ColumnMapping {
+function looksLikeDate(value: string): boolean {
+  const normalized = value
+    .trim()
+    .replace(/[.]/g, '-')
+    .replace(/\//g, '-')
+    .replace(/年/g, '-')
+    .replace(/月/g, '-')
+    .replace(/日/g, '')
+    .replace(/\s+/g, ' ');
+
+  if (!normalized) return false;
+  if (/^\d{4}-\d{1,2}-\d{1,2}/.test(normalized)) return true;
+
+  const parsed = new Date(normalized);
+  return !Number.isNaN(parsed.getTime());
+}
+
+function inferDateColumn(headers: string[], records: PurchaseRecord[]): string {
+  let bestColumn = '';
+  let bestScore = 0;
+
+  for (const header of headers) {
+    const values = records
+      .map((record) => (record[header] ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 20);
+
+    if (values.length < 3) continue;
+
+    const dateLikeCount = values.filter(looksLikeDate).length;
+    const score = dateLikeCount / values.length;
+
+    if (score >= 0.6 && score > bestScore) {
+      bestColumn = header;
+      bestScore = score;
+    }
+  }
+
+  return bestColumn;
+}
+
+export function autoDetectMapping(headers: string[], records: PurchaseRecord[] = []): ColumnMapping {
+  const detectedDate = findColumn(headers, DATE_CANDIDATES) || inferDateColumn(headers, records);
+
   return {
     name: findColumn(headers, NAME_CANDIDATES),
     email: findColumn(headers, EMAIL_CANDIDATES),
     contentHolder: findColumn(headers, CONTENT_HOLDER_CANDIDATES),
     project: findColumn(headers, PROJECT_CANDIDATES),
-    date: findColumn(headers, DATE_CANDIDATES),
+    date: detectedDate,
     amount: findColumn(headers, AMOUNT_CANDIDATES),
   };
 }

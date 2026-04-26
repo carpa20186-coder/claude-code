@@ -44,13 +44,13 @@ export default function App() {
   const applyRecords = useCallback((recs: PurchaseRecord[], cols: string[], currentMapping?: ColumnMapping) => {
     setRawRecords(recs);
     setColumns(cols);
-    const m = currentMapping ?? autoDetectMapping(cols);
+    const m = currentMapping ?? autoDetectMapping(cols, recs);
     applyEnrichAndBuild(recs, m, rulesRef.current);
     return m;
   }, []);
 
   const handleImport = useCallback((recs: PurchaseRecord[], cols: string[], sheetUrl?: string) => {
-    const detected = autoDetectMapping(cols);
+    const detected = autoDetectMapping(cols, recs);
     setMapping(detected);
     applyRecords(recs, cols, detected);
     setSyncConfig(sheetUrl ? { sheetUrl, intervalMin: 5, lastSync: new Date() } : null);
